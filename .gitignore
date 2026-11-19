@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Builds
+/build/
+helper/.build/
+helper/.swiftpm/
+app/node_modules/
+app/dist/
+app/dist-electron/
+
+# Diagnóstico: binário compilado e logs locais do mouse/teclado
+diagnostics/m535diag
+diagnostics/*.txt

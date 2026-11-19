@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "settings": {
+    "enabled": true,
+    "gestureThreshold": 50,
+    "tiltRepeatDelayMs": 400,
+    "tiltRepeatIntervalMs": 0
+  },
+  "profiles": [
+    {
+      "id": "default",
+      "name": "Padrão",
+      "apps": [],
+      "bindings": {
+        "gestureClick": { "type": "system", "action": "missionControl" },
+        "gestureUp": { "type": "system", "action": "missionControl" },
+        "gestureDown": { "type": "system", "action": "appExpose" },
+        "gestureLeft": { "type": "system", "action": "spaceLeft" },
+        "gestureRight": { "type": "system", "action": "spaceRight" },
+        "tiltLeft": { "type": "system", "action": "back" },
+        "tiltRight": { "type": "system", "action": "forward" },
+        "middleClick": { "type": "default" }
+      }
+    },
+    {
+      "id": "exemplo-apps",
+      "name": "Exemplo: gestos abrem apps (no Finder)",
+      "apps": ["com.apple.finder"],
+      "bindings": {
+        "gestureUp": { "type": "openApp", "bundleId": "com.apple.Terminal", "name": "Terminal", "toggle": true },
+        "gestureDown": { "type": "openURL", "url": "~/Downloads" },
+        "gestureRight": { "type": "openURL", "url": "https://www.apple.com" },
+        "gestureLeft": { "type": "keystroke", "keyCode": 49, "modifiers": ["cmd", "shift"], "keyLabel": "Space" },
+        "middleClick": { "type": "shell", "command": "say 'clique na roda'" }
+      }
+    }
+  ]
+}

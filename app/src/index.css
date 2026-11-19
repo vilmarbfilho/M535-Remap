@@ -1,0 +1,158 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+  --surface: #ffffff;
+  --surface-2: #f5f5f7;
+  --surface-3: #ececf0;
+  --fg: #1d1d1f;
+  --fg-muted: #6e6e73;
+  --fg-faint: #a1a1a6;
+  --line: rgba(0, 0, 0, 0.1);
+  --line-strong: rgba(0, 0, 0, 0.18);
+  --accent: #007aff;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(0, 122, 255, 0.12);
+  --ok: #28a745;
+  --warn: #c77c02;
+  --warn-soft: rgba(255, 159, 10, 0.14);
+  --danger: #d70015;
+  --cap: #ffffff;
+  --cap-shadow: rgba(0, 0, 0, 0.22);
+  --mouse-body: #e9e9ee;
+  --mouse-button: #f4f4f7;
+  --mouse-stroke: #b9b9c0;
+  --mouse-slot: #3a3a3f;
+  --mouse-wheel: #6b6b72;
+  --pv-screen: #eef1f6;
+  --pv-win: #ffffff;
+  --pv-line: rgba(0, 0, 0, 0.14);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #1e1e20;
+    --surface-2: #2a2a2d;
+    --surface-3: #343438;
+    --fg: #f5f5f7;
+    --fg-muted: #a1a1a6;
+    --fg-faint: #6e6e73;
+    --line: rgba(255, 255, 255, 0.1);
+    --line-strong: rgba(255, 255, 255, 0.18);
+    --accent: #0a84ff;
+    --accent-soft: rgba(10, 132, 255, 0.2);
+    --ok: #32d74b;
+    --warn: #ffb340;
+    --warn-soft: rgba(255, 159, 10, 0.16);
+    --danger: #ff453a;
+    --cap: #3a3a3e;
+    --cap-shadow: rgba(0, 0, 0, 0.6);
+    --mouse-body: #3a3a3f;
+    --mouse-button: #46464c;
+    --mouse-stroke: #5d5d64;
+    --mouse-slot: #1a1a1c;
+    --mouse-wheel: #8e8e95;
+    --pv-screen: #2b2f37;
+    --pv-win: #444852;
+    --pv-line: rgba(255, 255, 255, 0.14);
+  }
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-faint: var(--fg-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-cap: var(--cap);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  /* Transparente: a barra lateral usa a vibrancy nativa da janela. */
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+input,
+textarea {
+  user-select: text;
+  cursor: text;
+}
+
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+@keyframes flash {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent);
+  }
+  100% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+.flash {
+  animation: flash 0.6s ease-out;
+}
+
+@keyframes svgflash {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.svg-flash {
+  animation: svgflash 0.7s ease-out forwards;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.toast-in {
+  animation: toast-in 0.18s ease-out;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 4px;
+}
