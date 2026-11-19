@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Config } from "../shared/schema";
+import type { Language } from "../shared/i18n";
 
 export interface AppInfo { bundleId?: string; name: string; path: string; icon?: string }
 
@@ -48,6 +49,7 @@ export interface M535Api {
   setRecording(on: boolean): Promise<void>;
   openLog(): Promise<void>;
   openConfigFolder(): Promise<void>;
+  setLanguage(lang: Language): Promise<void>;
   onHelperEvent(cb: (e: HelperEvent) => void): () => void;
   onHelperConnection(cb: (c: boolean) => void): () => void;
   onConfigExternal(cb: (r: { config: Config; error?: string }) => void): () => void;
@@ -62,7 +64,7 @@ export const api: M535Api = window.m535;
 
 const appInfoCache = new Map<string, Promise<AppInfo | null>>();
 
-/** Nome + ícone de um app a partir do bundle id ou caminho (com cache). */
+/** An app's name + icon from its bundle id or path (cached). */
 export function useAppInfo(idOrPath: string | undefined): AppInfo | null {
   const [info, setInfo] = useState<AppInfo | null>(null);
   useEffect(() => {

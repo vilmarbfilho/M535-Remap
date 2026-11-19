@@ -9,6 +9,6 @@ app/node_modules/
 app/dist/
 app/dist-electron/
 
-# Diagnóstico: binário compilado e logs locais do mouse/teclado
+# Diagnostics: compiled binary and local mouse/keyboard logs
 diagnostics/m535diag
 diagnostics/*.txt

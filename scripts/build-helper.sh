@@ -1,7 +1,7 @@
 #!/bin/bash
-# Compila o helper, monta build/M535 Remap Helper.app e assina.
-#   scripts/build-helper.sh            -> só build
-#   scripts/build-helper.sh --install  -> build + instala em ~/Applications e (re)inicia
+# Builds the helper, assembles build/M535 Remap Helper.app and signs it.
+#   scripts/build-helper.sh            -> build only
+#   scripts/build-helper.sh --install  -> build + install to ~/Applications and (re)start
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -36,10 +36,10 @@ if [[ "${1:-}" == "--install" ]]; then
   echo "→ Instalando em $INSTALL_DIR"
   mkdir -p "$INSTALL_DIR"
   if pgrep -x M535Helper >/dev/null; then
-    pkill -TERM -x M535Helper || true   # SIGTERM → o helper restaura o mouse antes de sair
+    pkill -TERM -x M535Helper || true   # SIGTERM → the helper restores the mouse before exiting
     for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -x M535Helper >/dev/null || break; sleep 0.3; done
   fi
-  # Migração: versões antigas instalavam o helper como "M535 Remap.app" (nome que agora é da interface).
+  # Migration: old versions installed the helper as "M535 Remap.app" (a name now used by the UI).
   OLD="$INSTALL_DIR/M535 Remap.app"
   if [ -d "$OLD" ] && [ "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$OLD/Contents/Info.plist" 2>/dev/null)" = "com.m535remap.helper" ]; then
     rm -rf "$OLD"

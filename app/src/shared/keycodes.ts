@@ -1,4 +1,4 @@
-// KeyboardEvent.code → virtual keycode do macOS (kVK_*), independente do layout do teclado.
+// KeyboardEvent.code → macOS virtual keycode (kVK_*), independent of the keyboard layout.
 export const CODE_TO_MAC: Record<string, number> = {
   KeyA: 0, KeyS: 1, KeyD: 2, KeyF: 3, KeyH: 4, KeyG: 5, KeyZ: 6, KeyX: 7, KeyC: 8, KeyV: 9,
   IntlBackslash: 10, KeyB: 11, KeyQ: 12, KeyW: 13, KeyE: 14, KeyR: 15, KeyY: 16, KeyT: 17,
@@ -17,12 +17,13 @@ export const CODE_TO_MAC: Record<string, number> = {
 };
 
 const SPECIAL_LABELS: Record<string, string> = {
-  Space: "Espaço", Enter: "↩", NumpadEnter: "⌤", Tab: "⇥", Backspace: "⌫", Delete: "⌦", Escape: "⎋",
+  Space: "Space", Enter: "↩", NumpadEnter: "⌤", Tab: "⇥", Backspace: "⌫", Delete: "⌦", Escape: "⎋",
   ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓",
   PageUp: "⇞", PageDown: "⇟", Home: "↖", End: "↘", Insert: "Help",
 };
 
-/** Rótulo legível da tecla (respeita o layout atual via `key` para teclas de caractere). */
+/** Human-readable key label (follows the current layout via `key` for character keys).
+ *  Saved in config.json, so it stays language-neutral; see `displayKeyLabel` for the UI. */
 export function keyLabel(code: string, key: string): string {
   if (SPECIAL_LABELS[code]) return SPECIAL_LABELS[code];
   if (/^F\d+$/.test(code)) return code;
@@ -32,11 +33,16 @@ export function keyLabel(code: string, key: string): string {
   return key.length === 1 ? key.toUpperCase() : key;
 }
 
-/** Ordem da Apple: ⌃ ⌥ ⇧ ⌘ */
+/** Apple's order: ⌃ ⌥ ⇧ ⌘ */
 export const MODIFIER_ORDER = ["ctrl", "option", "shift", "cmd", "fn"] as const;
 export const MODIFIER_SYMBOL: Record<string, string> = { ctrl: "⌃", option: "⌥", shift: "⇧", cmd: "⌘", fn: "fn" };
 export const MODIFIER_NAME: Record<string, string> = { ctrl: "Control", option: "Option", shift: "Shift", cmd: "Command", fn: "Fn" };
 
 export function sortModifiers(mods: string[]): string[] {
   return [...mods].sort((a, b) => MODIFIER_ORDER.indexOf(a as never) - MODIFIER_ORDER.indexOf(b as never));
+}
+
+/** Space was saved as "Espaço" by older versions and as "Space" now; show it in the UI language. */
+export function displayKeyLabel(label: string, spaceName: string): string {
+  return label === "Space" || label === "Espaço" ? spaceName : label;
 }

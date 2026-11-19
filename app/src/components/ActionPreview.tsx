@@ -2,12 +2,14 @@ import { useId } from "react";
 import type { Action } from "../shared/schema";
 import { describeAction, SYSTEM_BY_ID } from "../data/actions";
 import { useAppInfo } from "../lib/api";
+import { useT } from "../lib/i18n";
 import { Shortcut } from "./ui";
 
-/** Ilustração do que a ação faz + título e descrição. */
+/** Illustration of what the action does + title and description. */
 export function ActionPreview({ action }: { action: Action }) {
+  const t = useT();
   const app = useAppInfo(action.type === "openApp" ? action.bundleId ?? action.path : undefined);
-  const d = describeAction(action, app?.name);
+  const d = describeAction(t, action, app?.name);
   const sys = action.type === "system" && action.action ? SYSTEM_BY_ID[action.action] : undefined;
 
   return (
@@ -20,7 +22,7 @@ export function ActionPreview({ action }: { action: Action }) {
         {d.detail && <div className="mt-0.5 truncate text-[12px] text-muted" title={d.detail}>{d.detail}</div>}
         {sys?.shortcut && (
           <div className="mt-2 flex items-center gap-2 text-[11px] text-muted">
-            Enviado como <Shortcut modifiers={sys.shortcut.mods} label={sys.shortcut.key} size="sm" />
+            {t.preview.sentAs} <Shortcut modifiers={sys.shortcut.mods} label={sys.shortcut.key} size="sm" />
           </div>
         )}
       </div>
@@ -29,15 +31,16 @@ export function ActionPreview({ action }: { action: Action }) {
 }
 
 function Illustration({ action, appIcon }: { action: Action; appIcon?: string }) {
+  const t = useT();
   switch (action.type) {
     case "keystroke":
       return action.keyCode === undefined
-        ? <span className="text-muted">Clique em “Gravar atalho”</span>
+        ? <span className="text-muted">{t.preview.clickRecord}</span>
         : <Shortcut modifiers={action.modifiers} label={action.keyLabel ?? `#${action.keyCode}`} size="lg" />;
     case "openApp":
       return appIcon
         ? <img src={appIcon} alt="" className="h-20 w-20 drop-shadow-md" />
-        : <span className="text-muted">Escolha um aplicativo</span>;
+        : <span className="text-muted">{t.preview.chooseApp}</span>;
     case "shell":
       return (
         <div className="w-full max-w-[300px] rounded-lg bg-[#1d1f21] p-3 font-mono text-[11px] text-[#c5c8c6] shadow-inner">
@@ -47,7 +50,7 @@ function Illustration({ action, appIcon }: { action: Action; appIcon?: string })
     case "system":
       return <SystemIllustration id={action.action ?? ""} />;
     default: {
-      const Icon = describeAction(action).icon;
+      const Icon = describeAction(t, action).icon;
       return <Icon className="h-14 w-14 text-faint" strokeWidth={1.5} />;
     }
   }
@@ -79,6 +82,7 @@ function Screen({ children, x = 4, w = 152 }: { children?: React.ReactNode; x?: 
 }
 
 function SystemIllustration({ id }: { id: string }) {
+  const t = useT();
   const clip = useId();
   const meta = SYSTEM_BY_ID[id];
   let body: React.ReactNode;
@@ -136,8 +140,8 @@ function SystemIllustration({ id }: { id: string }) {
           <rect x={92} y={20} width={64} height={46} rx={5} fill="var(--pv-screen)" stroke={right ? A : LINE} strokeWidth={right ? 2 : 1} />
           <Win x={12} y={28} w={30} h={20} /><Win x={110} y={34} w={36} h={24} />
           <path d={right ? "M72 43 h14 m-5 -5 l5 5 l-5 5" : "M88 43 h-14 m5 -5 l-5 5 l5 5"} stroke={A} strokeWidth={2.2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-          <text x={36} y={80} textAnchor="middle" fontSize={8} fill="var(--fg-muted)">Desktop 1</text>
-          <text x={124} y={80} textAnchor="middle" fontSize={8} fill="var(--fg-muted)">Desktop 2</text>
+          <text x={36} y={80} textAnchor="middle" fontSize={8} fill="var(--fg-muted)">{t.preview.desktop(1)}</text>
+          <text x={124} y={80} textAnchor="middle" fontSize={8} fill="var(--fg-muted)">{t.preview.desktop(2)}</text>
         </>
       );
       break;

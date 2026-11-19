@@ -1,6 +1,6 @@
 import Foundation
 
-/// Log simples em ~/Library/Logs/M535Remap/helper.log (rotaciona ao passar de 1 MB).
+/// Simple log at ~/Library/Logs/M535Remap/helper.log (rotates once it exceeds 1 MB).
 enum Log {
     static var echoToStdout = false
 

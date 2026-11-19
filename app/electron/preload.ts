@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("m535", {
   setRecording: (on: boolean) => ipcRenderer.invoke("recorder:set", on),
   openLog: () => ipcRenderer.invoke("shell:openLog"),
   openConfigFolder: () => ipcRenderer.invoke("shell:openConfigFolder"),
+  setLanguage: (lang: string) => ipcRenderer.invoke("app:setLanguage", lang),
   onHelperEvent: (cb: (e: unknown) => void) => on("helper:event", cb),
   onHelperConnection: (cb: (c: boolean) => void) => on("helper:connection", cb),
   onConfigExternal: (cb: (r: unknown) => void) => on("config:external", cb),

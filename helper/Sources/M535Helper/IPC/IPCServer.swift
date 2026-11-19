@@ -2,11 +2,11 @@ import Foundation
 
 struct IPCError: Error { let message: String }
 
-/// Servidor JSON-lines em Unix domain socket (~/Library/Application Support/M535Remap/helper.sock).
+/// JSON-lines server on a Unix domain socket (~/Library/Application Support/M535Remap/helper.sock).
 ///
 /// Request:  {"id":1,"method":"status","params":{}}
-/// Response: {"id":1,"result":{...}}  ou  {"id":1,"error":"..."}
-/// Evento:   {"event":"control","data":{"control":"gestureUp","phase":"fire"}}
+/// Response: {"id":1,"result":{...}}  or  {"id":1,"error":"..."}
+/// Event:    {"event":"control","data":{"control":"gestureUp","phase":"fire"}}
 final class IPCServer {
     typealias Handler = (_ method: String, _ params: [String: Any]) throws -> Any
 
@@ -38,7 +38,7 @@ final class IPCServer {
         return addr
     }
 
-    /// Outra instância do helper já está escutando neste socket?
+    /// Is another helper instance already listening on this socket?
     static func isAlreadyRunning(path: String) -> Bool {
         guard var addr = makeAddress(path) else { return false }
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
@@ -51,22 +51,22 @@ final class IPCServer {
     }
 
     func start() throws {
-        guard var addr = Self.makeAddress(path) else { throw IPCError(message: "caminho do socket longo demais") }
+        guard var addr = Self.makeAddress(path) else { throw IPCError(message: "socket path too long") }
         unlink(path)
         listenFD = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard listenFD >= 0 else { throw IPCError(message: "socket() falhou: \(errno)") }
+        guard listenFD >= 0 else { throw IPCError(message: "socket() failed: \(errno)") }
         let r = withUnsafePointer(to: &addr) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(listenFD, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
         }
-        guard r == 0 else { throw IPCError(message: "bind() falhou: \(errno)") }
+        guard r == 0 else { throw IPCError(message: "bind() failed: \(errno)") }
         chmod(path, 0o600)
-        guard listen(listenFD, 8) == 0 else { throw IPCError(message: "listen() falhou: \(errno)") }
+        guard listen(listenFD, 8) == 0 else { throw IPCError(message: "listen() failed: \(errno)") }
         _ = fcntl(listenFD, F_SETFL, O_NONBLOCK)
         let src = DispatchSource.makeReadSource(fileDescriptor: listenFD, queue: .main)
         src.setEventHandler { [weak self] in self?.acceptClients() }
         src.resume()
         listenSource = src
-        Log.info("IPC escutando em \(path)")
+        Log.info("IPC listening on \(path)")
     }
 
     func stop() {

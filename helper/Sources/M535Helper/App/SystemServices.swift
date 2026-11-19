@@ -3,7 +3,7 @@ import ApplicationServices
 import IOKit.hid
 import ServiceManagement
 
-/// App ativo (para perfis por aplicativo).
+/// Frontmost app (for per-app profiles).
 final class AppWatcher {
     private(set) var frontmostBundleID: String? = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
     var onChange: ((String?) -> Void)?
@@ -20,9 +20,9 @@ final class AppWatcher {
 }
 
 enum Permissions {
-    /// Necessária para abrir o mouse via IOHID.
+    /// Required to open the mouse via IOHID.
     static var inputMonitoring: Bool { IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted }
-    /// Necessária para enviar atalhos / cliques sintéticos.
+    /// Required to send synthetic shortcuts / clicks.
     static var accessibility: Bool { AXIsProcessTrusted() }
 
     static func requestInputMonitoring() { _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent) }
@@ -46,9 +46,9 @@ enum LoginItem {
     static func set(_ enabled: Bool) {
         do {
             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-            Log.info("Iniciar com o macOS: \(enabled)")
+            Log.info("Launch at login: \(enabled)")
         } catch {
-            Log.error("Falha ao alterar item de login: \(error.localizedDescription)")
+            Log.error("Failed to change login item: \(error.localizedDescription)")
         }
     }
 }

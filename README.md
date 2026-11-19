@@ -1,176 +1,178 @@
 # M535 Remap
 
-Alternativa leve ao Logi Options/Options+ para o **Logitech M535 Bluetooth Mouse** no **macOS (Apple Silicon)**.
-Remapeia o botão de gestos, o tilt da roda e o clique na roda sem os drivers da Logitech, com uma interface
-visual para configurar ações e perfis por aplicativo.
+A lightweight alternative to Logi Options/Options+ for the **Logitech M535 Bluetooth Mouse** on **macOS (Apple Silicon)**.
+It remaps the gesture button, wheel tilt and wheel click without Logitech's drivers, with a visual interface
+for configuring actions and per-app profiles.
 
-São dois apps:
+There are two apps:
 
-| App | Papel |
+| App | Role |
 |---|---|
-| **M535 Remap Helper** | Helper nativo em Swift na barra de menus. Fala com o mouse via HID++ e executa as ações. Leve, roda sempre. |
-| **M535 Remap** | Interface Electron para configurar. Só precisa estar aberta enquanto você configura. |
+| **M535 Remap Helper** | Native Swift menu bar helper. Talks to the mouse over HID++ and runs the actions. Lightweight, always running. |
+| **M535 Remap** | Electron settings interface. Only needs to be open while you configure things. |
 
 ---
 
-## Sumário
+## Contents
 
-- [Recursos](#recursos)
-- [Requisitos](#requisitos)
-- [Instalação](#instalação)
-- [Permissões do macOS](#permissões-do-macos)
-- [Uso](#uso)
-- [Configuração (`config.json`)](#configuração-configjson)
-- [Desinstalação](#desinstalação)
-- [Desenvolvimento](#desenvolvimento)
-- [Estrutura do projeto](#estrutura-do-projeto)
-- [Como funciona](#como-funciona)
-- [Diagnóstico do mouse](#diagnóstico-do-mouse)
-- [Solução de problemas](#solução-de-problemas)
-- [Limitações](#limitações)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [macOS permissions](#macos-permissions)
+- [Usage](#usage)
+- [Configuration (`config.json`)](#configuration-configjson)
+- [Uninstalling](#uninstalling)
+- [Development](#development)
+- [Project structure](#project-structure)
+- [How it works](#how-it-works)
+- [Mouse diagnostics](#mouse-diagnostics)
+- [Troubleshooting](#troubleshooting)
+- [Limitations](#limitations)
 
 ---
 
-## Recursos
+## Features
 
-- **Botão de gestos** (o botão pequeno atrás da roda): clique + 4 direções (segure e mova o mouse), cada um com sua ação.
-- **Tilt ← / →** da roda, com repetição opcional enquanto inclinado.
-- **Clique na roda**: nativo por padrão, ou remapeável.
-- **Tipos de ação**: ação do sistema (24 prontas: Mission Control, App Exposé, Spaces, Voltar/Avançar, mídia, volume,
-  abas, captura de tela…), atalho de teclado, abrir app (com opção de ocultar se já estiver na frente),
-  abrir link/arquivo/pasta e comando shell.
-- **Perfis por aplicativo**, herdando do perfil Padrão o que não for personalizado.
-- **Diagrama interativo** do M535 com destaque ao vivo de todos os controles (inclusive esquerdo, direito e rolagem).
-- **Tema claro/escuro** seguindo o macOS.
-- O mouse **volta ao padrão de fábrica** sempre que o helper é encerrado ou pausado.
+- **Gesture button** (the small button behind the wheel): click + 4 directions (hold and move the mouse), each with its own action.
+- **Tilt ← / →** on the wheel, with optional repeat while tilted.
+- **Wheel click**: native by default, or remappable.
+- **Action types**: system action (24 built in: Mission Control, App Exposé, Spaces, Back/Forward, media, volume,
+  tabs, screenshot…), keyboard shortcut, open app (optionally hiding it if it's already frontmost),
+  open link/file/folder and shell command.
+- **Per-app profiles**, inheriting anything not customized from the Default profile.
+- **Interactive diagram** of the M535 with live highlighting of every control (including left, right and scrolling).
+- **Light/dark theme** following macOS.
+- **English and Brazilian Portuguese**, in both the settings app and the helper's menu (Settings → Language; defaults to the system language).
+- The mouse **returns to its factory behavior** whenever the helper quits or is paused.
 
-### Ações padrão
+### Default actions
 
-| Controle | Ação |
+| Control | Action |
 |---|---|
-| Gestos: clique | Mission Control |
-| Gestos: ↑ | Mission Control |
-| Gestos: ↓ | Janelas do app (App Exposé) |
-| Gestos: ← / → | Desktop anterior / próximo (Spaces) |
-| Tilt ← / → | Voltar / Avançar (⌘[ / ⌘]) |
-| Clique na roda | Clique do meio nativo |
+| Gesture: click | Mission Control |
+| Gesture: ↑ | Mission Control |
+| Gesture: ↓ | App windows (App Exposé) |
+| Gesture: ← / → | Previous / next desktop (Spaces) |
+| Tilt ← / → | Back / Forward (⌘[ / ⌘]) |
+| Wheel click | Native middle click |
 
 ---
 
-## Requisitos
+## Requirements
 
-- macOS 13 ou superior, Apple Silicon (arm64)
-- Logitech M535 pareado por Bluetooth (VID `046D`, PID `B016`)
-- Xcode Command Line Tools (`xcode-select --install`), para o `swift`
-- Node.js 22+ e npm 11+
+- macOS 13 or later, Apple Silicon (arm64)
+- Logitech M535 paired over Bluetooth (VID `046D`, PID `B016`)
+- Xcode Command Line Tools (`xcode-select --install`), for `swift`
+- Node.js 22+ and npm 11+
 
 ---
 
-## Instalação
+## Installation
 
-### 1. Certificado de assinatura (uma única vez)
+### 1. Signing certificate (one time only)
 
 ```bash
 scripts/create-signing-cert.sh
 ```
 
-Cria um certificado autoassinado `M535Remap Local Signing` no seu Keychain e pede sua senha para confiar nele
-para assinatura de código. **Por que:** o macOS associa as permissões de Acessibilidade e Monitoramento de Entrada
-à assinatura do app. Com a assinatura ad-hoc padrão, elas seriam perdidas a cada rebuild. Não é preciso conta de
-desenvolvedor Apple — o app só roda na sua máquina.
+Creates a self-signed `M535Remap Local Signing` certificate in your Keychain and asks for your password to trust it
+for code signing. **Why:** macOS ties the Accessibility and Input Monitoring permissions to the app's signature.
+With the default ad-hoc signature they would be lost on every rebuild. No Apple developer account is needed — the
+app only runs on your machine.
 
-> No primeiro build o macOS pode perguntar se o `codesign` pode usar a chave: escolha **Sempre Permitir**.
+> On the first build macOS may ask whether `codesign` can use the key: choose **Always Allow**.
 
-### 2. Dependências da interface
+### 2. Interface dependencies
 
 ```bash
 cd app
 npm install
 ```
 
-### 3. Gerar e instalar o app
+### 3. Build and install the app
 
 ```bash
 cd app
 npm run package
 ```
 
-Isso compila o helper, a interface, empacota tudo em `build/` e instala **`~/Applications/M535 Remap.app`**
-(com o helper embutido). Abra o app: ele mostra **"Instalar helper"** no topo — clique para instalar e iniciar
-o **M535 Remap Helper**.
+This builds the helper and the interface, packages everything into `build/` and installs **`~/Applications/M535 Remap.app`**
+(with the helper bundled). Open the app: it shows **"Install helper"** at the top — click it to install and start
+**M535 Remap Helper**.
 
-Alternativa pelo terminal (instala/atualiza só o helper e o reinicia):
+Terminal alternative (installs/updates only the helper and restarts it):
 
 ```bash
 scripts/build-helper.sh --install
 ```
 
-### 4. Permissões
+### 4. Permissions
 
-Conceda as permissões ao **M535 Remap Helper** (veja abaixo). Pronto: o ícone do mouse aparece na barra de menus.
+Grant the permissions to **M535 Remap Helper** (see below). Done: the mouse icon appears in the menu bar.
 
 ---
 
-## Permissões do macOS
+## macOS permissions
 
-O **helper** precisa de duas permissões, em **Ajustes do Sistema → Privacidade e Segurança**:
+The **helper** needs two permissions, under **System Settings → Privacy & Security**:
 
-| Permissão | Para quê |
+| Permission | What for |
 |---|---|
-| **Monitoramento de Entrada** | Abrir o mouse via IOHID e receber os eventos do botão de gestos/tilt |
-| **Acessibilidade** | Enviar atalhos de teclado, cliques e teclas de mídia sintéticos |
+| **Input Monitoring** | Open the mouse via IOHID and receive gesture button/tilt events |
+| **Accessibility** | Send synthetic keyboard shortcuts, clicks and media keys |
 
-O helper pede as duas ao iniciar. Se o ícone na barra de menus mostrar ⚠︎, use as opções do menu
-(**Conceder Monitoramento de Entrada…**, **Conceder Acessibilidade…**) e depois **Reiniciar para aplicar permissões**.
-Se o app não aparecer na lista, clique em **+** e escolha `~/Applications/M535 Remap Helper.app`.
+The helper asks for both on launch. If the menu bar icon shows ⚠︎, use the menu options
+(**Grant Input Monitoring…**, **Grant Accessibility…**) and then **Restart to apply permissions**.
+If the app isn't listed, click **+** and choose `~/Applications/M535 Remap Helper.app`.
 
-A interface (M535 Remap) **não** precisa de nenhuma permissão.
+The interface (M535 Remap) does **not** need any permissions.
 
 ---
 
-## Uso
+## Usage
 
 ### Interface
 
-- **Diagrama**: clique num controle para editá-lo. Ao usar o mouse, o controle acende na tela
-  (e é selecionado, se "Selecionar ao pressionar" estiver ativo nos Ajustes).
-- **Pad de gestos**: escolha o clique ou uma das 4 direções do botão de gestos.
-- **Editor**: escolha o tipo de ação, veja a prévia do que acontece e use **Testar ação**.
-  - *Atalho*: clique em **Gravar atalho** e pressione as teclas (Esc cancela).
-  - *App*: **Escolher…** abre o seletor de aplicativos.
-- **Perfis**: **Perfil para um app…** cria um perfil ativo quando aquele app está em primeiro plano. Controles não
-  personalizados usam o Padrão; **Herdar do Padrão** desfaz uma personalização.
-- **Ajustes**: pausar o remapeamento, iniciar com o macOS, sensibilidade do gesto, repetição do tilt, log,
-  instalação/atualização do helper e desinstalação.
+- **Diagram**: click a control to edit it. When you use the mouse, the control lights up on screen
+  (and gets selected, if "Select on press" is enabled in Settings).
+- **Gesture pad**: pick the click or one of the 4 directions of the gesture button.
+- **Editor**: choose the action type, see a preview of what happens and use **Test action**.
+  - *Shortcut*: click **Record shortcut** and press the keys (Esc cancels).
+  - *App*: **Choose…** opens the application picker.
+- **Profiles**: **Profile for an app…** creates a profile that's active while that app is in the foreground. Controls
+  that aren't customized use Default; **Inherit from Default** undoes a customization.
+- **Settings**: language, pause remapping, launch at login, gesture sensitivity, tilt repeat, log,
+  helper install/update and uninstall.
 
-Tudo é salvo automaticamente; o helper aplica as mudanças na hora.
+Everything is saved automatically; the helper applies changes immediately.
 
-### Menu da barra (helper)
+### Menu bar (helper)
 
-Mostra conexão e bateria do mouse e o perfil ativo, e permite pausar o remapeamento, ativar "Iniciar com o macOS",
-abrir as configurações, ver o log e reiniciar/sair. **Sair** devolve o mouse ao comportamento de fábrica.
+Shows the mouse's connection and battery and the active profile, and lets you pause remapping, enable launch at login,
+open the settings, view the log and restart/quit. **Quit** returns the mouse to its factory behavior.
 
-### Como fazer os gestos
+### How to do gestures
 
-Segure o **botão pequeno atrás da roda**, **mova o mouse inteiro** na direção desejada e solte. A ação dispara na
-soltura. Sem movimento, conta como clique. (Inclinar a roda para os lados é o *tilt*, que é outro controle.)
+Hold the **small button behind the wheel**, **move the whole mouse** in the desired direction and release. The action
+fires on release. With no movement, it counts as a click. (Tilting the wheel sideways is the *tilt*, a separate control.)
 
 ---
 
-## Configuração (`config.json`)
+## Configuration (`config.json`)
 
-Arquivo: `~/Library/Application Support/M535Remap/config.json`. A interface o edita, mas ele também pode ser editado
-à mão — o helper recarrega ao salvar e, se o JSON for inválido, mantém a configuração anterior e avisa.
-Exemplo completo em [`config.example.json`](config.example.json).
+File: `~/Library/Application Support/M535Remap/config.json`. The interface edits it, but it can also be edited
+by hand — the helper reloads it on save and, if the JSON is invalid, keeps the previous configuration and warns you.
+Full example in [`config.example.json`](config.example.json).
 
 ```jsonc
 {
   "version": 1,
   "settings": {
-    "enabled": true,              // remapeamento ativo
-    "gestureThreshold": 50,       // movimento mínimo para o clique virar gesto
-    "tiltRepeatIntervalMs": 0,    // 0 = sem repetição do tilt
-    "tiltRepeatDelayMs": 400
+    "enabled": true,              // remapping enabled
+    "gestureThreshold": 50,       // minimum movement for a click to become a gesture
+    "tiltRepeatIntervalMs": 0,    // 0 = no tilt repeat
+    "tiltRepeatDelayMs": 400,
+    "language": "en"              // "en" or "pt-BR"; omit to follow the system language
   },
   "profiles": [
     {
@@ -189,217 +191,231 @@ Exemplo completo em [`config.example.json`](config.example.json).
 }
 ```
 
-**Controles** (chaves de `bindings`): `gestureClick`, `gestureUp`, `gestureDown`, `gestureLeft`, `gestureRight`,
+The `default` profile's `name` is only a stored label; the interface always shows it translated ("Default" / "Padrão").
+
+**Controls** (`bindings` keys): `gestureClick`, `gestureUp`, `gestureDown`, `gestureLeft`, `gestureRight`,
 `tiltLeft`, `tiltRight`, `middleClick`.
 
-**Ações:**
+**Actions:**
 
-| `type` | Campos | Exemplo |
+| `type` | Fields | Example |
 |---|---|---|
 | `system` | `action` | `{"type":"system","action":"spaceLeft"}` |
-| `keystroke` | `keyCode` (virtual keycode do macOS), `modifiers` (`cmd`, `shift`, `option`, `ctrl`, `fn`), `keyLabel` | `{"type":"keystroke","keyCode":8,"modifiers":["cmd"],"keyLabel":"C"}` |
-| `openApp` | `bundleId` e/ou `path`, `name`, `toggle` | `{"type":"openApp","bundleId":"com.apple.Safari"}` |
-| `openURL` | `url` (link, ou caminho de arquivo/pasta com `/` ou `~`) | `{"type":"openURL","url":"~/Downloads"}` |
-| `shell` | `command` (executado com `/bin/zsh -lc`) | `{"type":"shell","command":"say olá"}` |
-| `default` | — | Comportamento nativo (só `middleClick`) |
-| `none` | — | Não faz nada |
+| `keystroke` | `keyCode` (macOS virtual keycode), `modifiers` (`cmd`, `shift`, `option`, `ctrl`, `fn`), `keyLabel` | `{"type":"keystroke","keyCode":8,"modifiers":["cmd"],"keyLabel":"C"}` |
+| `openApp` | `bundleId` and/or `path`, `name`, `toggle` | `{"type":"openApp","bundleId":"com.apple.Safari"}` |
+| `openURL` | `url` (a link, or a file/folder path starting with `/` or `~`) | `{"type":"openURL","url":"~/Downloads"}` |
+| `shell` | `command` (run with `/bin/zsh -lc`) | `{"type":"shell","command":"say hello"}` |
+| `default` | — | Native behavior (`middleClick` only) |
+| `none` | — | Does nothing |
 
-Ações de sistema disponíveis: `missionControl`, `appExpose`, `showDesktop`, `launchpad`, `spaceLeft`, `spaceRight`,
+Available system actions: `missionControl`, `appExpose`, `showDesktop`, `launchpad`, `spaceLeft`, `spaceRight`,
 `fullscreen`, `closeWindow`, `back`, `forward`, `previousTab`, `nextTab`, `zoomIn`, `zoomOut`, `middleClick`,
 `playPause`, `nextTrack`, `previousTrack`, `volumeUp`, `volumeDown`, `mute`, `spotlight`, `screenshot`, `lockScreen`.
 
 ---
 
-## Desinstalação
+## Uninstalling
 
-Apagar os apps **não** remove configuração, logs, preferências e permissões. Use uma das opções abaixo.
+Deleting the apps does **not** remove the configuration, logs, preferences or permissions. Use one of the options below.
 
-### Pelo app
+### From the app
 
-**Ajustes → Instalação → Desinstalar…** Confirme na janela do macOS (remover o certificado de assinatura é uma
-opção separada, desmarcada por padrão). O app se fecha e a remoção termina sozinha; o resultado fica em
+**Settings → Installation → Uninstall…** Confirm in the macOS dialog (removing the signing certificate is a
+separate option, unchecked by default). The app quits and the removal finishes on its own; the result is written to
 `/tmp/m535remap-uninstall.log`.
 
-### Pelo terminal
+### From the terminal
 
 ```bash
-scripts/uninstall.sh                # pede confirmação
-scripts/uninstall.sh --dry-run      # só mostra o que seria feito
-scripts/uninstall.sh --yes          # sem confirmação
-scripts/uninstall.sh --remove-cert  # remove também o certificado de assinatura
-scripts/uninstall.sh --keep-ui      # mantém o app de configuração
+scripts/uninstall.sh                # asks for confirmation
+scripts/uninstall.sh --dry-run      # only shows what would be done
+scripts/uninstall.sh --yes          # no confirmation
+scripts/uninstall.sh --remove-cert  # also removes the signing certificate
+scripts/uninstall.sh --keep-ui      # keeps the settings app
 ```
 
-O script:
+The script:
 
-1. desativa "Iniciar com o macOS";
-2. **encerra o helper**, devolvendo o mouse ao padrão de fábrica;
-3. reseta as permissões de Monitoramento de Entrada e Acessibilidade;
-4. remove `M535 Remap Helper.app` e `M535 Remap.app` de `~/Applications` (só apps com o bundle id do projeto);
-5. remove configuração, logs e preferências:
+1. disables launch at login;
+2. **quits the helper**, returning the mouse to its factory behavior;
+3. resets the Input Monitoring and Accessibility permissions;
+4. removes `M535 Remap Helper.app` and `M535 Remap.app` from `~/Applications` (only apps with the project's bundle id);
+5. removes configuration, logs and preferences:
    - `~/Library/Application Support/M535Remap`
    - `~/Library/Application Support/M535 Remap`
    - `~/Library/Logs/M535Remap`
    - `~/Library/Preferences/com.m535remap.settings.plist`
 
-O **código do projeto nunca é tocado**. Se o reset de alguma permissão falhar (o script avisa com ⚠︎), remova-a
-manualmente em Privacidade e Segurança com o botão **−**.
+The **project's source code is never touched**. If resetting a permission fails (the script warns with ⚠︎), remove it
+manually in Privacy & Security with the **−** button.
 
-> Se o helper for apagado enquanto está rodando, ou travar, o botão de gestos e o tilt ficam desviados até o mouse
-> ser desligado e ligado de novo. O desinstalador sempre encerra o helper antes.
+> If the helper is deleted while running, or crashes, the gesture button and tilt stay diverted until the mouse is
+> turned off and on again. The uninstaller always quits the helper first.
 
 ---
 
-## Desenvolvimento
+## Development
 
 ```bash
-# Interface com recarga ao vivo (Vite + Electron)
+# Interface with live reload (Vite + Electron)
 cd app && npm run dev
 
-# Checagem de tipos
+# Type checking
 cd app && npm run typecheck
 
-# Build da interface (sem empacotar)
+# Build the interface (without packaging)
 cd app && npm run build
 
-# Helper: compila e monta build/M535 Remap Helper.app (assinado)
+# Helper: build and assemble build/M535 Remap Helper.app (signed)
 scripts/build-helper.sh
 
-# Helper: compila, instala em ~/Applications e reinicia
+# Helper: build, install to ~/Applications and restart
 scripts/build-helper.sh --install
 
-# App completo: helper + interface empacotados e instalados em ~/Applications
+# Full app: helper + interface packaged and installed to ~/Applications
 cd app && npm run package
 ```
 
-Rodar o helper direto pelo terminal (logs no stdout; usa as permissões do app de terminal):
+Run the helper straight from the terminal (logs to stdout; uses the terminal app's permissions):
 
 ```bash
 cd helper && swift build -c release && "$(swift build -c release --show-bin-path)/M535Helper" --verbose
 ```
 
-Captura da interface sem interação (útil para revisar o visual):
+Non-interactive capture of the interface (handy for reviewing the visuals):
 
 ```bash
 M535_SCREENSHOT=/tmp/ui.png M535_THEME=dark M535_HASH=settings \
-  "build/M535 Remap-darwin-arm64/M535 Remap.app/Contents/MacOS/M535 Remap" --user-data-dir=/tmp/m535-ui
+  "build/M535 Remap-darwin-arm64/M535 Remap.app/Contents/MacOS/M535 Remap" --user-data-dir=/tmp/m535-ui --lang=en-US
 ```
 
-`M535_THEME` aceita `light`/`dark`; `M535_HASH=settings` abre os Ajustes.
+`M535_THEME` accepts `light`/`dark`; `M535_HASH=settings` opens Settings; `--lang` (`en-US`, `pt-BR`) picks the
+initial language when none has been chosen yet.
 
-### Protocolo IPC do helper
+### Translations
 
-Socket Unix em `~/Library/Application Support/M535Remap/helper.sock`, JSON por linha:
+UI strings live in `app/src/shared/i18n/`: `en.ts` is the reference dictionary and `pt-BR.ts` must match its shape
+(the type checker enforces it). To add a language, create a new dictionary typed as `Messages` and register it in
+`i18n/index.ts`, and add the helper's strings in `helper/Sources/M535Helper/App/Strings.swift`.
+
+The chosen language is saved as `settings.language` in `config.json`, which is how the helper's menu follows it.
+The UI also caches it in local storage (for startup) and sends it to the Electron main process, which uses it for
+native dialogs and error messages. The helper's log is always in English.
+
+### Helper IPC protocol
+
+Unix socket at `~/Library/Application Support/M535Remap/helper.sock`, one JSON message per line:
 
 ```bash
 printf '{"id":1,"method":"status"}\n' | nc -U -w 1 ~/Library/Application\ Support/M535Remap/helper.sock
 ```
 
-Métodos: `ping`, `status`, `reloadConfig`, `setEnabled {enabled}`, `runAction {action}`,
+Methods: `ping`, `status`, `reloadConfig`, `setEnabled {enabled}`, `runAction {action}`,
 `requestPermission {kind}`, `setLaunchAtLogin {enabled}`.
-Eventos enviados pelo helper: `status`, `configError`, `control {control, phase}`
-(fases `down`, `up`, `fire`, `scrollUp`, `scrollDown`).
+Events sent by the helper: `status`, `configError`, `control {control, phase}`
+(phases `down`, `up`, `fire`, `scrollUp`, `scrollDown`).
 
 ---
 
-## Estrutura do projeto
+## Project structure
 
 ```
 m535/
-├── helper/                       # Helper nativo (Swift Package)
+├── helper/                       # Native helper (Swift Package)
 │   ├── Sources/M535Helper/
-│   │   ├── Device/M535Device.swift    # IOHID + HID++ 2.0 (desvio, raw XY, bateria)
-│   │   ├── Capture/RemapEngine.swift  # gestos, tilt, clique na roda → ações
-│   │   ├── Actions/ActionRunner.swift # atalhos, ações do sistema, apps, URLs, shell
-│   │   ├── Config/                    # modelo e leitura/escrita do config.json
-│   │   ├── IPC/IPCServer.swift        # socket Unix JSON-lines
-│   │   └── App/                       # barra de menus, permissões, login item, log
-│   └── Support/                  # Info.plist e ícone do helper
+│   │   ├── Device/M535Device.swift    # IOHID + HID++ 2.0 (diversion, raw XY, battery)
+│   │   ├── Capture/RemapEngine.swift  # gestures, tilt, wheel click → actions
+│   │   ├── Actions/ActionRunner.swift # shortcuts, system actions, apps, URLs, shell
+│   │   ├── Config/                    # config.json model and read/write
+│   │   ├── IPC/IPCServer.swift        # JSON-lines Unix socket
+│   │   └── App/                       # menu bar, permissions, login item, log
+│   └── Support/                  # helper Info.plist and icon
 ├── app/                          # Interface (Electron + React + TypeScript + Tailwind)
-│   ├── electron/                 # processo main, preload, cliente do helper
+│   ├── electron/                 # main process, preload, helper client
 │   ├── src/
-│   │   ├── components/           # diagrama, pad de gestos, editor, prévias, painéis
-│   │   ├── shared/               # esquema do config (zod) e keycodes
-│   │   └── data/actions.ts       # catálogo de ações do sistema
-│   ├── scripts/                  # dev, build do Electron, empacotamento
-│   └── build-resources/          # ícone (svg, png, icns)
-├── diagnostics/m535diag.swift    # ferramenta de diagnóstico do mouse
+│   │   ├── components/           # diagram, gesture pad, editor, previews, panels
+│   │   ├── shared/               # config schema (zod), keycodes and i18n dictionaries
+│   │   ├── lib/                  # helper API bridge and i18n React context
+│   │   └── data/actions.ts       # system action catalog
+│   ├── scripts/                  # dev, Electron build, packaging
+│   └── build-resources/          # icon (svg, png, icns)
+├── diagnostics/m535diag.swift    # mouse diagnostics tool
 ├── scripts/
-│   ├── create-signing-cert.sh    # certificado autoassinado
-│   ├── build-helper.sh           # build/instalação do helper
-│   └── uninstall.sh              # desinstalação
+│   ├── create-signing-cert.sh    # self-signed certificate
+│   ├── build-helper.sh           # helper build/install
+│   └── uninstall.sh              # uninstaller
 └── config.example.json
 ```
 
 ---
 
-## Como funciona
+## How it works
 
-O M535 expõe, além do mouse HID padrão, o protocolo **HID++ 2.0** da Logitech (reports `0x10`/`0x11`).
-Pela feature **ReprogControlsV4 (`0x1B04`)** o helper "desvia" controles: o mouse para de enviar o comportamento
-nativo e passa a notificar o helper.
+Besides the standard HID mouse, the M535 exposes Logitech's **HID++ 2.0** protocol (reports `0x10`/`0x11`).
+Through the **ReprogControlsV4 (`0x1B04`)** feature the helper "diverts" controls: the mouse stops performing the
+native behavior and notifies the helper instead.
 
-| CID | Controle | Desvio |
+| CID | Control | Diversion |
 |---|---|---|
-| `0x00D0` | Botão de gestos | com **raw XY** (o cursor fica parado durante o gesto) |
-| `0x00CE` | Tilt ← | simples |
-| `0x00CF` | Tilt → | simples |
-| `0x0052` | Clique na roda | simples, só se algum perfil o remapear |
+| `0x00D0` | Gesture button | with **raw XY** (the cursor stays still during the gesture) |
+| `0x00CE` | Tilt ← | plain |
+| `0x00CF` | Tilt → | plain |
+| `0x0052` | Wheel click | plain, only if some profile remaps it |
 
-Esquerdo, direito e rolagem não são desviados; o helper só lê o report nativo `0x02` para o destaque ao vivo.
+Left, right and scrolling aren't diverted; the helper only reads the native `0x02` report for the live highlight.
 
-Particularidades do firmware levantadas no diagnóstico (já tratadas no código):
+Firmware quirks found during diagnostics (already handled in the code):
 
-- **Sempre usar o report longo (`0x11`)**: no curto, o firmware lê lixo nos parâmetros que faltam e responde erro
-  `0x02` de forma aleatória.
-- Para restaurar um controle, usar as flags **`0x22`**; `0x02` deixa o raw XY ligado.
-- `getCidReporting` devolve dados inconsistentes, então o helper não confia em leitura de estado: guarda o estado
-  desejado e o reaplica a cada conexão — e também quando detecta que o mouse perdeu o desvio (por exemplo, ao
-  acordar), ao ver o atalho nativo ⌃↑ do botão de gestos chegar.
-- O desvio não é persistente: desligar o mouse sempre o devolve ao padrão.
+- **Always use the long report (`0x11`)**: with the short one, the firmware reads garbage for the missing parameters
+  and randomly replies with error `0x02`.
+- To restore a control, use flags **`0x22`**; `0x02` leaves raw XY on.
+- `getCidReporting` returns inconsistent data, so the helper doesn't trust reading state back: it keeps the desired
+  state and reapplies it on every connection — and also when it detects the mouse lost the diversion (e.g. on
+  wake), by seeing the gesture button's native ⌃↑ shortcut arrive.
+- Diversion isn't persistent: turning the mouse off always returns it to the default.
 
 ---
 
-## Diagnóstico do mouse
+## Mouse diagnostics
 
-`diagnostics/m535diag.swift` foi usado para levantar os controles e o protocolo; útil se algo mudar
-(outro firmware, outro modelo):
+`diagnostics/m535diag.swift` was used to map out the controls and the protocol; useful if something changes
+(another firmware, another model):
 
 ```bash
 cd diagnostics
 swiftc -O m535diag.swift -o m535diag
-./m535diag perms          # estado das permissões
-./m535diag hidpp          # versão HID++, features e controles reprogramáveis
-./m535diag monitor        # reports HID brutos lado a lado com os eventos do macOS
-./m535diag divert --moves # desvia gestos/tilt e mostra CIDs e direções (Ctrl+C restaura)
-./m535diag reset          # restaura os controles ao padrão
+./m535diag perms          # permission status
+./m535diag hidpp          # HID++ version, features and reprogrammable controls
+./m535diag monitor        # raw HID reports side by side with macOS events
+./m535diag divert --moves # diverts gestures/tilt and shows CIDs and directions (Ctrl+C restores)
+./m535diag reset          # restores the controls to the default
 ```
 
-Encerre o helper antes de usar o `divert`, para os dois não disputarem o mouse. Os `.txt` gerados ficam fora do git
-(o `monitor` registra o que é digitado no teclado).
+Quit the helper before using `divert`, so the two don't fight over the mouse. The generated `.txt` files are kept
+out of git (`monitor` records what's typed on the keyboard).
 
 ---
 
-## Solução de problemas
+## Troubleshooting
 
-| Sintoma | O que fazer |
+| Symptom | What to do |
 |---|---|
-| Ícone ⚠︎ na barra de menus | Falta permissão: use o menu do helper para concedê-la e depois **Reiniciar para aplicar permissões**. |
-| "Helper offline" na interface | Clique em **Iniciar helper** (ou **Instalar helper** se não estiver instalado). |
-| Gesto ← / → não troca de desktop | Ative ⌃← / ⌃→ em Ajustes → Teclado → Atalhos → Mission Control, e tenha mais de um desktop. |
-| Atalhos não fazem nada | Falta a permissão de **Acessibilidade** para o M535 Remap Helper. |
-| Permissões somem após rebuild | O build foi assinado ad-hoc: rode `scripts/create-signing-cert.sh` e recompile. |
-| Botões "presos" após o helper travar | Desligue e ligue o mouse (o desvio não é persistente). |
-| Ícone antigo no Dock/Finder | Cache do macOS; atualiza sozinho ou ao reabrir o app. |
-| Ver o que o helper está fazendo | Menu → **Mostrar log**, ou `~/Library/Logs/M535Remap/helper.log`. |
+| ⚠︎ icon in the menu bar | A permission is missing: grant it from the helper menu, then **Restart to apply permissions**. |
+| "Helper offline" in the interface | Click **Start helper** (or **Install helper** if it isn't installed). |
+| Gesture ← / → doesn't switch desktops | Enable ⌃← / ⌃→ in Settings → Keyboard → Shortcuts → Mission Control, and have more than one desktop. |
+| Shortcuts do nothing | M535 Remap Helper is missing the **Accessibility** permission. |
+| Permissions disappear after a rebuild | The build was signed ad-hoc: run `scripts/create-signing-cert.sh` and rebuild. |
+| Buttons "stuck" after the helper crashes | Turn the mouse off and on (diversion isn't persistent). |
+| Old icon in the Dock/Finder | macOS cache; it updates by itself or when the app is reopened. |
+| See what the helper is doing | Menu → **Show log**, or `~/Library/Logs/M535Remap/helper.log`. |
 
 ---
 
-## Limitações
+## Limitations
 
-- Botões **esquerdo, direito e rolagem** permanecem nativos (aparecem como "Nativo" no diagrama).
-- O gravador de atalhos não captura combinações reservadas pelo sistema (ex.: ⌘Espaço).
-- "Mission Control", "Janelas do app", "Mostrar mesa" e "Launchpad" usam uma API privada do Dock, com alternativas
-  caso ela não exista; o Launchpad pode não abrir em versões do macOS que o substituíram.
-- O app de configuração ocupa ~250 MB por causa do Electron; o remapeamento em si fica no helper, que é leve.
-- Testado apenas com o M535 (`046D:B016`, firmware 18.0.3) via Bluetooth.
+- The **left, right and scrolling** controls stay native (they show as "Native" in the diagram).
+- The shortcut recorder can't capture combinations reserved by the system (e.g. ⌘Space).
+- "Mission Control", "App windows", "Show desktop" and "Launchpad" use a private Dock API, with fallbacks
+  in case it doesn't exist; Launchpad may not open on macOS versions that replaced it.
+- The settings app takes ~250 MB because of Electron; the remapping itself lives in the helper, which is lightweight.
+- Tested only with the M535 (`046D:B016`, firmware 18.0.3) over Bluetooth.

@@ -1,14 +1,14 @@
 #!/bin/bash
-# Desinstala o M535 Remap: apps, configuração, logs, preferências, item de login e permissões.
-# O código do projeto nunca é tocado. O certificado de assinatura só é removido com --remove-cert.
+# Uninstalls M535 Remap: apps, configuration, logs, preferences, login item and permissions.
+# The project's source code is never touched. The signing certificate is only removed with --remove-cert.
 #
-# uso: scripts/uninstall.sh [--yes] [--dry-run] [--remove-cert] [--keep-ui] [--ui-app CAMINHO] [--wait-pid PID]
-#   --yes          não pede confirmação
-#   --dry-run      só mostra o que seria feito
-#   --remove-cert  remove também o certificado "M535Remap Local Signing" do Keychain
-#   --keep-ui      não remove o app de configuração nem os dados dele
-#   --ui-app       caminho do app de configuração a remover (padrão: ~/Applications/M535 Remap.app)
-#   --wait-pid     (usado pelo próprio app) espera este processo sair antes de remover o app de configuração
+# usage: scripts/uninstall.sh [--yes] [--dry-run] [--remove-cert] [--keep-ui] [--ui-app PATH] [--wait-pid PID]
+#   --yes          don't ask for confirmation
+#   --dry-run      only show what would be done
+#   --remove-cert  also remove the "M535Remap Local Signing" certificate from the Keychain
+#   --keep-ui      don't remove the settings app or its data
+#   --ui-app       path of the settings app to remove (default: ~/Applications/M535 Remap.app)
+#   --wait-pid     (used by the app itself) wait for this process to exit before removing the settings app
 set -uo pipefail
 
 YES=0; DRY=0; REMOVE_CERT=0; KEEP_UI=0; WAIT_PID=""
@@ -40,11 +40,11 @@ CERT="M535Remap Local Signing"
 
 ok()   { echo "  ✓ $*"; }
 warn() { echo "  ⚠︎ $*"; }
-# Executa comandos destrutivos (ou só os mostra com --dry-run).
+# Runs destructive commands (or only prints them with --dry-run).
 act() { if [ $DRY -eq 1 ]; then echo "    [dry-run] $*"; else "$@"; fi; }
 bundle_id() { /usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$1/Contents/Info.plist" 2>/dev/null; }
 
-# Remove um .app somente se o bundle id bater (nunca apaga outro app com o mesmo nome).
+# Removes an .app only if the bundle id matches (never deletes another app with the same name).
 remove_app() {
   local path="$1" id="$2" quiet="${3:-}"
   [ -d "$path" ] || return 0
@@ -98,7 +98,7 @@ done
 
 echo "→ Removendo apps"
 remove_app "$APPS/M535 Remap Helper.app" "$HELPER_ID"
-remove_app "$APPS/M535 Remap.app" "$HELPER_ID" quiet   # instalações antigas usavam este nome para o helper
+remove_app "$APPS/M535 Remap.app" "$HELPER_ID" quiet   # old installs used this name for the helper
 
 echo "→ Removendo configuração e logs"
 act rm -rf "$SUPPORT" "$LOGS" && ok "Configuração e logs removidos"
@@ -111,7 +111,7 @@ if [ $REMOVE_CERT -eq 1 ]; then
     else
       TMP=$(mktemp)
       security find-certificate -c "$CERT" -p > "$TMP"
-      security remove-trusted-cert "$TMP" >/dev/null 2>&1 || true   # pode pedir a senha
+      security remove-trusted-cert "$TMP" >/dev/null 2>&1 || true   # may ask for the password
       rm -f "$TMP"
       security delete-identity -c "$CERT" >/dev/null 2>&1 || security delete-certificate -c "$CERT" >/dev/null 2>&1
     fi
@@ -123,7 +123,7 @@ fi
 
 remove_ui() {
   remove_app "$UI_APP" "$UI_ID"
-  remove_app "$APPS/M535 Remap Settings.app" "$UI_ID"   # nome antigo
+  remove_app "$APPS/M535 Remap Settings.app" "$UI_ID"   # old name
   act rm -rf "$UI_DATA"
   act defaults delete "$UI_ID" >/dev/null 2>&1 || true
   act rm -f "$PREFS"

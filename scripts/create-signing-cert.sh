@@ -1,14 +1,14 @@
 #!/bin/bash
-# Cria (uma única vez) um certificado autoassinado de assinatura de código no Keychain de login.
-# Com uma assinatura estável, o macOS mantém as permissões (Acessibilidade / Monitoramento de Entrada)
-# entre rebuilds — a assinatura ad-hoc padrão faz o TCC revogá-las a cada build.
+# Creates (once) a self-signed code signing certificate in the login Keychain.
+# With a stable signature, macOS keeps the permissions (Accessibility / Input Monitoring)
+# across rebuilds — the default ad-hoc signature makes TCC revoke them on every build.
 #
-# O macOS vai pedir sua senha para confiar no certificado para "Assinatura de Código".
+# macOS will ask for your password to trust the certificate for "Code Signing".
 set -euo pipefail
 
 NAME="M535Remap Local Signing"
 KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
-OPENSSL=/usr/bin/openssl   # LibreSSL do sistema: gera um .p12 que o `security` importa sem flags extras
+OPENSSL=/usr/bin/openssl   # system LibreSSL: produces a .p12 that `security` imports without extra flags
 
 if security find-identity -v -p codesigning | grep -q "\"$NAME\""; then
   echo "✓ Certificado \"$NAME\" já existe e é válido para assinatura."

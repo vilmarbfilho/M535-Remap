@@ -1,13 +1,13 @@
 import Foundation
 
-/// Traduz eventos físicos do M535 (CIDs desviados + movimento bruto) em ações configuradas.
+/// Translates physical M535 events (diverted CIDs + raw movement) into configured actions.
 final class RemapEngine {
     private let device: M535Device
     private let runner: ActionRunner
     private let store: ConfigStore
     private let apps: AppWatcher
 
-    /// (controle, fase) → IPC, para a UI destacar o controle ao vivo. Fases: "down", "up", "fire".
+    /// (control, phase) → IPC, so the UI can highlight the control live. Phases: "down", "up", "fire".
     var onEvent: ((String, String) -> Void)?
 
     private var pressed = Set<UInt16>()
@@ -26,7 +26,7 @@ final class RemapEngine {
         device.onNativeWheel = { [weak self] in self?.nativeWheel($0) }
     }
 
-    // MARK: Controles nativos (só repassados à UI para o destaque ao vivo)
+    // MARK: Native controls (only forwarded to the UI for the live highlight)
 
     private var nativeState: UInt8 = 0
     private var lastWheelEvent = Date.distantPast
@@ -40,7 +40,7 @@ final class RemapEngine {
     }
 
     private func nativeWheel(_ delta: Int) {
-        // Limita a ~30 eventos/s para não inundar o IPC numa rolagem rápida.
+        // Throttles to ~30 events/s so fast scrolling doesn't flood the IPC.
         guard Date().timeIntervalSince(lastWheelEvent) > 0.033 else { return }
         lastWheelEvent = Date()
         onEvent?("scroll", delta > 0 ? "scrollUp" : "scrollDown")
@@ -71,7 +71,7 @@ final class RemapEngine {
         runner.run(a)
     }
 
-    // MARK: Eventos do dispositivo
+    // MARK: Device events
 
     private func pressedChanged(_ now: Set<UInt16>) {
         let down = now.subtracting(pressed)
@@ -124,7 +124,7 @@ final class RemapEngine {
             } else {
                 c = gdy > 0 ? .gestureDown : .gestureUp
             }
-            Log.debug("gesto dx=\(gdx) dy=\(gdy)")
+            Log.debug("gesture dx=\(gdx) dy=\(gdy)")
             fire(c)
         case CID.tiltLeft, CID.tiltRight:
             tiltTimer?.invalidate()

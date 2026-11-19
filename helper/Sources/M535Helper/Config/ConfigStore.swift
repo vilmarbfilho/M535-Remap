@@ -1,6 +1,6 @@
 import Foundation
 
-/// Carrega/salva config.json e recarrega automaticamente quando o arquivo muda (ex.: salvo pela UI Electron).
+/// Loads/saves config.json and reloads automatically when the file changes (e.g. saved by the Electron UI).
 final class ConfigStore {
     private(set) var config: Config = .defaults
     private(set) var lastError: String?
@@ -18,7 +18,7 @@ final class ConfigStore {
             reload(notify: false)
         } else {
             save(.defaults)
-            Log.info("config.json padrão criado em \(Paths.config.path)")
+            Log.info("Default config.json created at \(Paths.config.path)")
         }
     }
 
@@ -31,10 +31,11 @@ final class ConfigStore {
             lastError = nil
             guard c != config || !notify else { return }
             config = c
-            Log.info("Configuração carregada (\(c.profiles.count) perfil(is))")
+            Log.info("Configuration loaded (\(c.profiles.count) profile(s))")
             if notify { onChange?(c) }
         } catch {
-            let msg = "config.json inválido — mantendo a configuração anterior: \(error)"
+            // Shown in the UI banner, so it follows the language of the last valid configuration.
+            let msg = Strings.forLanguage(config.settings.language).invalidConfig("\(error)")
             lastError = msg
             Log.error(msg)
             onError?(msg)
@@ -50,14 +51,14 @@ final class ConfigStore {
             lastData = data
             config = c
         } catch {
-            Log.error("Falha ao salvar config: \(error)")
+            Log.error("Failed to save config: \(error)")
         }
     }
 
-    /// Observa o diretório (escritas atômicas substituem o arquivo, então observar o fd do arquivo não basta).
+    /// Watches the directory (atomic writes replace the file, so watching the file's fd is not enough).
     func watch() {
         dirFD = open(Paths.support.path, O_EVTONLY)
-        guard dirFD >= 0 else { Log.warn("Não foi possível observar \(Paths.support.path)"); return }
+        guard dirFD >= 0 else { Log.warn("Could not watch \(Paths.support.path)"); return }
         let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: dirFD, eventMask: [.write, .rename, .delete], queue: .main)
         src.setEventHandler { [weak self] in
             self?.pending?.cancel()

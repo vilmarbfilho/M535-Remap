@@ -1,12 +1,12 @@
-// m535diag — diagnóstico do Logitech M535 no macOS
+// m535diag — Logitech M535 diagnostics on macOS
 //
-// Compilar:  swiftc -O diagnostics/m535diag.swift -o diagnostics/m535diag
-// Uso:
-//   ./m535diag perms            -> estado das permissões (Input Monitoring / Accessibility)
-//   ./m535diag monitor [--moves]-> HID raw reports do M535 + CGEventTap (listen-only), lado a lado
-//   ./m535diag hidpp            -> sonda HID++ 2.0: versão, features e controles reprogramáveis
-//   ./m535diag divert [cid]     -> desvia temporariamente um controle (padrão: botão de gestos)
-//                                  via HID++ com raw XY e imprime a direção do gesto. Ctrl+C restaura.
+// Build:     swiftc -O diagnostics/m535diag.swift -o diagnostics/m535diag
+// Usage:
+//   ./m535diag perms            -> permission status (Input Monitoring / Accessibility)
+//   ./m535diag monitor [--moves]-> raw M535 HID reports + CGEventTap (listen-only), side by side
+//   ./m535diag hidpp            -> HID++ 2.0 probe: version, features and reprogrammable controls
+//   ./m535diag divert [cid]     -> temporarily diverts a control (default: gesture button)
+//                                  via HID++ with raw XY and prints the gesture direction. Ctrl+C restores.
 
 import AppKit
 import ApplicationServices
@@ -18,7 +18,7 @@ import IOKit.hid
 let VID = 0x046D
 let PID = 0xB016
 let SWID: UInt8 = 0x0A
-let DEV_IDX: UInt8 = 0xFF  // Bluetooth direto (sem receiver)
+let DEV_IDX: UInt8 = 0xFF  // direct Bluetooth (no receiver)
 let t0 = Date()
 
 func ts() -> String { String(format: "%8.3f", Date().timeIntervalSince(t0)) }
@@ -28,7 +28,7 @@ func log(_ src: String, _ msg: String) {
     fflush(stdout)
 }
 
-// MARK: - Estado global (callbacks C não capturam contexto)
+// MARK: - Global state (C callbacks can't capture context)
 
 var manager: IOHIDManager!
 var devices: [IOHIDDevice] = []
@@ -64,7 +64,7 @@ let featureNames: [UInt16: String] = [
     0x1805: "OOBState", 0x1830: "PowerModes", 0x1890: "RFTest", 0x18A1: "LEDSoftwareControl",
 ]
 
-// MARK: - Decodificação dos reports
+// MARK: - Report decoding
 
 func signExtend12(_ v: Int) -> Int { v & 0x800 != 0 ? v - 0x1000 : v }
 
@@ -193,7 +193,7 @@ func runFor(_ seconds: Double, until done: () -> Bool) {
     while !done() && Date() < end { CFRunLoopRunInMode(.defaultMode, 0.02, true) }
 }
 
-/// Envia um request HID++ 2.0 e aguarda a resposta. Retorna os parâmetros (bytes após o fn/swid).
+/// Sends an HID++ 2.0 request and waits for the reply. Returns the parameters (bytes after fn/swid).
 func hidpp(_ feat: UInt8, _ fn: UInt8, _ params: [UInt8] = []) -> [UInt8]? {
     guard let dev = devices.first else { return nil }
     for long in [true, false] {
@@ -224,7 +224,7 @@ func featureIndex(_ id: UInt16) -> UInt8? {
     return r[0]
 }
 
-// MARK: - Comandos
+// MARK: - Commands
 
 func cmdPerms() {
     let im = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
@@ -302,9 +302,9 @@ func cmdDivert(_ cids: [UInt16], selfTest: Bool) {
     }
     reprogFeatIdx = idx
     var ok: [UInt16] = []
-    quietErrors = true  // rawXY só é aceito em 1 controle por vez; os demais caem no divert simples
+    quietErrors = true  // rawXY is only accepted on 1 control at a time; the others fall back to plain divert
     for cid in cids {
-        // flags: divert(0x01) dvalid(0x02) rawXY(0x10) rvalid(0x20)  — NÃO persistente
+        // flags: divert(0x01) dvalid(0x02) rawXY(0x10) rvalid(0x20)  — NOT persistent
         if hidpp(idx, 3, [UInt8(cid >> 8), UInt8(cid & 0xFF), 0x33]) != nil {
             ok.append(cid); print(String(format: "✓ CID 0x%04X desviado com raw XY", cid))
         } else if hidpp(idx, 3, [UInt8(cid >> 8), UInt8(cid & 0xFF), 0x03]) != nil {
@@ -324,7 +324,7 @@ func cmdDivert(_ cids: [UInt16], selfTest: Bool) {
     }
     if selfTest { restore(); exit(ok.count == cids.count ? 0 : 3) }
     print("\nPressione (e arraste) o botão de gestos, incline a roda ← e →, clique na roda. Ctrl+C restaura.\n")
-    rawLogging = true  // mostra também o que ainda chega pelo caminho HID normal
+    rawLogging = true  // also shows what still arrives through the normal HID path
 
     signal(SIGINT, SIG_IGN)
     let src = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
@@ -333,13 +333,13 @@ func cmdDivert(_ cids: [UInt16], selfTest: Bool) {
     CFRunLoopRun()
 }
 
-/// Lê o reporting de um CID validando o eco do CID na resposta.
+/// Reads a CID's reporting, validating the CID echo in the reply.
 func readReporting(_ idx: UInt8, _ cid: UInt16) -> (flags: UInt8, remap: UInt16)? {
     for _ in 0..<3 {
         guard let g = hidpp(idx, 2, [UInt8(cid >> 8), UInt8(cid & 0xFF)]), g.count >= 5 else { continue }
         let echo = UInt16(g[0]) << 8 | UInt16(g[1])
         if echo == cid { return (g[2], UInt16(g[3]) << 8 | UInt16(g[4])) }
-        runFor(0.2) { false }  // resposta atrasada de outro request — descarta e tenta de novo
+        runFor(0.2) { false }  // late reply to another request — discard and retry
     }
     return nil
 }
@@ -392,7 +392,7 @@ let tapCallback: CGEventTapCallBack = { _, type, event, _ in
     case .flagsChanged:
         log("TAP", "flagsChanged \(flagStr(event.flags))")
     default:
-        if type.rawValue == 14, let ns = NSEvent(cgEvent: event) {  // NSSystemDefined (teclas de mídia)
+        if type.rawValue == 14, let ns = NSEvent(cgEvent: event) {  // NSSystemDefined (media keys)
             log("TAP", "systemDefined subtype=\(ns.subtype.rawValue) data1=0x\(String(ns.data1, radix: 16))")
         }
     }

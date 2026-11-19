@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { MODIFIER_NAME, MODIFIER_SYMBOL, sortModifiers } from "../shared/keycodes";
+import { displayKeyLabel, MODIFIER_NAME, MODIFIER_SYMBOL, sortModifiers } from "../shared/keycodes";
+import { useT } from "../lib/i18n";
 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
@@ -23,12 +24,13 @@ export function KeyCap({ children, size = "md", title }: { children: ReactNode; 
 }
 
 export function Shortcut({ modifiers, label, size = "md" }: { modifiers?: string[]; label?: string; size?: "sm" | "md" | "lg" }) {
+  const t = useT();
   return (
     <span className="inline-flex items-center gap-1">
       {sortModifiers(modifiers ?? []).map((m) => (
         <KeyCap key={m} size={size} title={MODIFIER_NAME[m]}>{MODIFIER_SYMBOL[m] ?? m}</KeyCap>
       ))}
-      {label && <KeyCap size={size}>{label}</KeyCap>}
+      {label && <KeyCap size={size}>{displayKeyLabel(label, t.keys.space)}</KeyCap>}
     </span>
   );
 }

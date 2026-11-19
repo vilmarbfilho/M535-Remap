@@ -15,10 +15,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var signalSources: [DispatchSourceSignal] = []
     private var lastPerms: (Bool, Bool)?
 
-    // MARK: Ciclo de vida
+    // MARK: Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        Log.info("M535 Remap helper \(Self.version) iniciando (pid \(getpid()))")
+        Log.info("M535 Remap helper \(Self.version) starting (pid \(getpid()))")
 
         store.onChange = { [weak self] _ in
             self?.engine.refreshDiversion()
@@ -37,10 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupSignals()
 
         ipc.handler = { [weak self] method, params in
-            guard let self else { throw IPCError(message: "encerrando") }
+            guard let self else { throw IPCError(message: "shutting down") }
             return try self.handleIPC(method, params)
         }
-        do { try ipc.start() } catch { Log.error("IPC indisponível: \(error)") }
+        do { try ipc.start() } catch { Log.error("IPC unavailable: \(error)") }
 
         engine.refreshDiversion()
         device.start()
@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         device.restoreSync()
         ipc.stop()
-        Log.info("Helper encerrado")
+        Log.info("Helper stopped")
     }
 
     private func setupSignals() {
@@ -117,11 +117,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             store.reload()
             return statusDict()
         case "setEnabled":
-            guard let on = p["enabled"] as? Bool else { throw IPCError(message: "parâmetro 'enabled' ausente") }
+            guard let on = p["enabled"] as? Bool else { throw IPCError(message: "missing 'enabled' parameter") }
             setEnabled(on)
             return statusDict()
         case "runAction":
-            guard let raw = p["action"], JSONSerialization.isValidJSONObject(raw) else { throw IPCError(message: "parâmetro 'action' ausente") }
+            guard let raw = p["action"], JSONSerialization.isValidJSONObject(raw) else { throw IPCError(message: "missing 'action' parameter") }
             let a = try JSONDecoder().decode(Action.self, from: JSONSerialization.data(withJSONObject: raw))
             runner.run(a)
             return true
@@ -134,7 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             LoginItem.set(p["enabled"] as? Bool ?? true)
             return statusDict()
         default:
-            throw IPCError(message: "método desconhecido: \(method)")
+            throw IPCError(message: "unknown method: \(method)")
         }
     }
 
@@ -145,10 +145,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.save(c)
         engine.refreshDiversion()
         stateChanged()
-        Log.info("Remapeamento \(on ? "ativado" : "pausado")")
+        Log.info("Remapping \(on ? "enabled" : "paused")")
     }
 
-    // MARK: Barra de menus
+    // MARK: Menu bar
+
+    /// Strings in the language chosen in the settings app (read on every use, so changes apply at once).
+    private var s: Strings { Strings.forLanguage(store.config.settings.language) }
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -169,51 +172,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         img?.isTemplate = true
         button.image = img
         button.appearsDisabled = !store.config.settings.enabled || !device.isReady
-        button.toolTip = device.isReady ? "M535 Remap — conectado" : "M535 Remap — mouse desconectado"
+        button.toolTip = device.isReady ? s.connectedTooltip : s.disconnectedTooltip
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        let s = self.s
 
         let deviceTitle: String
-        if !device.managerOpen { deviceTitle = "M535: sem acesso ao dispositivo" }
+        if !device.managerOpen { deviceTitle = s.noDeviceAccess }
         else if device.isReady {
-            deviceTitle = "M535: conectado" + (device.batteryPercent.map { " · bateria \($0)%" } ?? "")
-        } else { deviceTitle = "M535: desconectado" }
+            deviceTitle = s.connected + (device.batteryPercent.map(s.battery) ?? "")
+        } else { deviceTitle = s.disconnected }
         menu.addItem(disabled(deviceTitle))
 
         if let p = store.config.profile(forApp: apps.frontmostBundleID) {
-            menu.addItem(disabled("Perfil: \(p.name)"))
+            menu.addItem(disabled(s.profile(p.id == "default" ? s.defaultProfileName : p.name)))
         }
-        if store.lastError != nil { menu.addItem(disabled("⚠︎ config.json inválido (veja o log)")) }
+        if store.lastError != nil { menu.addItem(disabled(s.invalidConfigMenu)) }
 
         if !Permissions.inputMonitoring || !Permissions.accessibility {
             menu.addItem(.separator())
             if !Permissions.inputMonitoring {
-                menu.addItem(item("⚠︎ Conceder Monitoramento de Entrada…", #selector(grantInputMonitoring)))
+                menu.addItem(item(s.grantInputMonitoring, #selector(grantInputMonitoring)))
             }
             if !Permissions.accessibility {
-                menu.addItem(item("⚠︎ Conceder Acessibilidade…", #selector(grantAccessibility)))
+                menu.addItem(item(s.grantAccessibility, #selector(grantAccessibility)))
             }
             if Permissions.inputMonitoring && !device.managerOpen {
-                menu.addItem(item("Reiniciar para aplicar permissões", #selector(relaunch)))
+                menu.addItem(item(s.restartToApply, #selector(relaunch)))
             }
         }
 
         menu.addItem(.separator())
-        let toggle = item("Remapeamento ativo", #selector(toggleEnabled))
+        let toggle = item(s.remappingEnabled, #selector(toggleEnabled))
         toggle.state = store.config.settings.enabled ? .on : .off
         menu.addItem(toggle)
-        let login = item("Iniciar com o macOS", #selector(toggleLogin))
+        let login = item(s.launchAtLogin, #selector(toggleLogin))
         login.state = LoginItem.isEnabled ? .on : .off
         menu.addItem(login)
 
         menu.addItem(.separator())
-        menu.addItem(item("Abrir configurações…", #selector(openSettings), key: ","))
-        menu.addItem(item("Mostrar log", #selector(showLog)))
-        menu.addItem(item("Reiniciar helper", #selector(relaunch)))
+        menu.addItem(item(s.openSettings, #selector(openSettings), key: ","))
+        menu.addItem(item(s.showLog, #selector(showLog)))
+        menu.addItem(item(s.restartHelper, #selector(relaunch)))
         menu.addItem(.separator())
-        menu.addItem(item("Sair do M535 Remap", #selector(quit), key: "q"))
+        menu.addItem(item(s.quit, #selector(quit), key: "q"))
     }
 
     private func disabled(_ title: String) -> NSMenuItem {
@@ -243,7 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleLogin() { LoginItem.set(!LoginItem.isEnabled) }
 
     @objc private func openSettings() {
-        // Abre a UI Electron; sem ela instalada, cai para o config.json no TextEdit.
+        // Opens the Electron UI; if it isn't installed, falls back to config.json in TextEdit.
         if let ui = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.m535remap.settings") {
             NSWorkspace.shared.openApplication(at: ui, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
             return
@@ -259,7 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func relaunch() {
         let path = Bundle.main.bundlePath
-        guard path.hasSuffix(".app") else { Log.warn("Reinício só funciona a partir do .app"); return }
+        guard path.hasSuffix(".app") else { Log.warn("Restart only works from the .app bundle"); return }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
         p.arguments = ["-c", "sleep 1; /usr/bin/open \"\(path)\""]

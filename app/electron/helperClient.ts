@@ -1,6 +1,7 @@
-// Cliente JSON-lines do socket Unix do helper Swift, com reconexão automática.
+// JSON-lines client for the Swift helper's Unix socket, with automatic reconnection.
 import net from "node:net";
 import { EventEmitter } from "node:events";
+import type { Messages } from "../src/shared/i18n";
 
 interface Pending {
   resolve: (v: unknown) => void;
@@ -17,7 +18,8 @@ export class HelperClient extends EventEmitter {
   private pending = new Map<number, Pending>();
   private stopped = false;
 
-  constructor(private readonly socketPath: string) {
+  /** `messages` returns the current UI language's strings (used for error messages). */
+  constructor(private readonly socketPath: string, private readonly messages: () => Messages["main"]) {
     super();
   }
 
@@ -30,7 +32,7 @@ export class HelperClient extends EventEmitter {
     this.sock?.destroy();
   }
 
-  /** Tenta reconectar já (ex.: logo depois de iniciar o helper). */
+  /** Tries to reconnect right away (e.g. right after starting the helper). */
   poke() {
     if (!this.connected && !this.sock) this.connect();
   }
@@ -59,7 +61,7 @@ export class HelperClient extends EventEmitter {
       this.connected = false;
       for (const [, p] of this.pending) {
         clearTimeout(p.timer);
-        p.reject(new Error("helper desconectado"));
+        p.reject(new Error(this.messages().helperDisconnected));
       }
       this.pending.clear();
       if (was) this.emit("connection", false);
@@ -95,12 +97,12 @@ export class HelperClient extends EventEmitter {
 
   call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
     const s = this.sock;
-    if (!s || !this.connected) return Promise.reject(new Error("helper offline"));
+    if (!s || !this.connected) return Promise.reject(new Error(this.messages().helperOffline));
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`timeout em ${method}`));
+        reject(new Error(this.messages().timeout(method)));
       }, 4000);
       this.pending.set(id, { resolve, reject, timer });
       s.write(JSON.stringify({ id, method, params }) + "\n");

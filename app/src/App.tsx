@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pause } from "lucide-react";
 import {
-  CONTROL_META, defaultConfig, effectiveAction,
+  defaultConfig, effectiveAction, isControlId,
   type Action, type Config, type ControlId, type SelectableId, type Settings,
 } from "./shared/schema";
 import { describeAction } from "./data/actions";
@@ -11,6 +11,8 @@ import { ActionEditor } from "./components/ActionEditor";
 import { Sidebar } from "./components/Sidebar";
 import { Banners, DeviceStatus, SettingsSheet } from "./components/Panels";
 import { Toggle } from "./components/ui";
+import { useI18n } from "./lib/i18n";
+import { isLanguage, type Language } from "./shared/i18n";
 
 const PHYSICAL_TO_CONTROL: Record<string, SelectableId> = {
   gesture: "gestureClick", tiltLeft: "tiltLeft", tiltRight: "tiltRight", middle: "middleClick",
@@ -20,10 +22,15 @@ function readPref(key: string, fallback: boolean) {
   try { const v = localStorage.getItem(key); return v === null ? fallback : v === "1"; } catch { return fallback; }
 }
 function writePref(key: string, v: boolean) {
-  try { localStorage.setItem(key, v ? "1" : "0"); } catch { /* sem storage */ }
+  try { localStorage.setItem(key, v ? "1" : "0"); } catch { /* no storage */ }
 }
 
+type SaveState = { kind: "saved" } | { kind: "saving" } | { kind: "error"; error: string };
+
 export default function App() {
+  const { t, lang, setLang } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [config, setConfig] = useState<Config | null>(null);
   const [configError, setConfigError] = useState<string>();
   const [profileId, setProfileId] = useState("default");
@@ -35,7 +42,7 @@ export default function App() {
   const [scrollDir, setScrollDir] = useState<"up" | "down" | null>(null);
   const scrollTimer = useRef<number | undefined>(undefined);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
-  const [saveState, setSaveState] = useState("Configuração salva");
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "saved" });
   const [showSettings, setShowSettings] = useState(() => location.hash === "#settings");
   const [install, setInstall] = useState<InstallInfo | null>(null);
   const [installBusy, setInstallBusy] = useState(false);
@@ -48,7 +55,7 @@ export default function App() {
   const profileRef = useRef(profileId);
   profileRef.current = profileId;
 
-  // Carregamento inicial + eventos.
+  // Initial load + events.
   useEffect(() => {
     api.loadConfig().then((r) => { setConfig(r.config); configRef.current = r.config; setConfigError(r.error); });
     api.helperState().then((s) => { setConnected(s.connected); setStatus(s.status); });
@@ -79,12 +86,14 @@ export default function App() {
     } else if (phase === "fire") {
       setFlashing((s) => new Set(s).add(control));
       setTimeout(() => setFlashing((s) => { const n = new Set(s); n.delete(control); return n; }), 650);
-      if (followRef.current && control in CONTROL_META) setSelected(control as SelectableId);
+      if (followRef.current && isControlId(control)) setSelected(control);
       const c = configRef.current;
       if (c) {
         const prof = c.profiles.find((p) => p.id === profileRef.current) ? profileRef.current : "default";
         const a = effectiveAction(c, prof, control as ControlId).action;
-        setToast({ id: Date.now(), text: `${CONTROL_META[control as ControlId]?.short ?? control} → ${describeAction(a).title}` });
+        const tr = tRef.current;
+        const short = isControlId(control) ? tr.controls[control].short : control;
+        setToast({ id: Date.now(), text: `${short} → ${describeAction(tr, a).title}` });
       }
     }
   };
@@ -95,21 +104,38 @@ export default function App() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  // Salvamento automático (debounce) — o helper recarrega o config.json sozinho.
+  // Debounced autosave — the helper reloads config.json on its own.
   const update = useCallback((fn: (c: Config) => Config) => {
     setConfig((prev) => {
       const next = fn(structuredClone(prev ?? defaultConfig()));
       configRef.current = next;
-      setSaveState("Salvando…");
+      setSaveState({ kind: "saving" });
       window.clearTimeout(saveTimer.current);
       saveTimer.current = window.setTimeout(async () => {
         const r = await api.saveConfig(next);
-        setSaveState(r.ok ? "Configuração salva" : `Erro ao salvar: ${r.error}`);
+        setSaveState(r.ok ? { kind: "saved" } : { kind: "error", error: r.error ?? "" });
         if (r.ok) setConfigError(undefined);
       }, 350);
       return next;
     });
   }, []);
+
+  // The language lives in config.json so the helper's menu follows it. If the file has one (e.g. chosen
+  // earlier, or edited by hand), adopt it; if it has none yet, store the current one.
+  const configLang = config?.settings.language;
+  const hasConfig = !!config;
+  useEffect(() => {
+    if (!hasConfig) return;
+    if (isLanguage(configLang)) { if (configLang !== lang) setLang(configLang); }
+    // Never write while config.json is invalid: the UI is showing defaults and would overwrite the user's file.
+    else if (!configError) update((c) => { c.settings.language = lang; return c; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configLang, hasConfig, configError]);
+
+  const changeLanguage = (l: Language) => {
+    setLang(l);
+    if (!configError) update((c) => { c.settings.language = l; return c; });
+  };
 
   const profile = config?.profiles.find((p) => p.id === profileId) ?? config?.profiles[0];
   const isDefault = profile?.id === "default";
@@ -150,7 +176,7 @@ export default function App() {
 
   const deleteProfile = (id: string) => {
     const p = config?.profiles.find((x) => x.id === id);
-    if (!p || !window.confirm(`Remover o perfil “${p.name}”?`)) return;
+    if (!p || !window.confirm(t.app.confirmDeleteProfile(p.name))) return;
     update((c) => { c.profiles = c.profiles.filter((x) => x.id !== id); return c; });
     if (profileId === id) setProfileId("default");
   };
@@ -161,9 +187,9 @@ export default function App() {
     setInstallBusy(true);
     try {
       setInstall(await api.installHelper());
-      setToast({ id: Date.now(), text: "Helper instalado e iniciado" });
+      setToast({ id: Date.now(), text: t.app.helperInstalled });
     } catch (e) {
-      setToast({ id: Date.now(), text: `Falha ao instalar: ${(e as Error).message}` });
+      setToast({ id: Date.now(), text: t.app.installFailed((e as Error).message) });
     } finally {
       setInstallBusy(false);
     }
@@ -178,13 +204,14 @@ export default function App() {
       const r = await api.helperCall(method, params);
       if (r && typeof r === "object" && "version" in r) setStatus(r as HelperStatus);
     } catch (e) {
-      setToast({ id: Date.now(), text: `Helper: ${(e as Error).message}` });
+      setToast({ id: Date.now(), text: t.app.helperError((e as Error).message) });
     }
   };
 
-  if (!config || !profile) return <div className="flex h-full items-center justify-center text-muted">Carregando…</div>;
+  if (!config || !profile) return <div className="flex h-full items-center justify-center text-muted">{t.common.loading}</div>;
 
   const appName = (a: Action) => (a.type === "openApp" ? a.name : undefined);
+  const saveText = saveState.kind === "saved" ? t.app.saved : saveState.kind === "saving" ? t.app.saving : t.app.saveError(saveState.error);
 
   return (
     <div className="flex h-full">
@@ -195,18 +222,18 @@ export default function App() {
         onAddApp={addAppProfile}
         onDelete={deleteProfile}
         onOpenSettings={() => setShowSettings(true)}
-        footer={<DeviceStatus connected={connected} status={status} saveState={saveState} />}
+        footer={<DeviceStatus connected={connected} status={status} saveState={saveText} />}
       />
 
       <main className="flex min-w-0 flex-1 flex-col bg-surface">
         <header className="drag flex h-[52px] shrink-0 items-center justify-between border-b border-line px-5">
           <div className="min-w-0">
-            <h1 className="truncate text-[15px] font-semibold">{profile.name}</h1>
+            <h1 className="truncate text-[15px] font-semibold">{isDefault ? t.defaultProfileName : profile.name}</h1>
           </div>
           <label className="no-drag flex items-center gap-2 text-[12px] text-muted">
             {!config.settings.enabled && <Pause className="h-3.5 w-3.5 text-warn" />}
-            Remapeamento
-            <Toggle checked={config.settings.enabled} onChange={(v) => setSettings({ ...config.settings, enabled: v })} label="Remapeamento ativo" />
+            {t.app.remapping}
+            <Toggle checked={config.settings.enabled} onChange={(v) => setSettings({ ...config.settings, enabled: v })} label={t.app.remappingActive} />
           </label>
         </header>
 
@@ -222,8 +249,8 @@ export default function App() {
                 <MouseDiagram selected={selected} onSelect={setSelected} actionOf={actionOf} pressed={pressed} scrollDir={scrollDir} />
                 <div className="w-full max-w-[460px]">
                   <div className="mb-2 flex items-baseline justify-between">
-                    <span className="text-[11px] font-semibold tracking-wide text-muted uppercase">Botão de gestos</span>
-                    <span className="text-[11px] text-faint">segure o botão e mova o mouse</span>
+                    <span className="text-[11px] font-semibold tracking-wide text-muted uppercase">{t.app.gestureButton}</span>
+                    <span className="text-[11px] text-faint">{t.app.gestureHint}</span>
                   </div>
                   <GesturePad selected={selected} onSelect={setSelected} actionOf={actionOf} flashing={flashing} appName={appName} />
                 </div>
@@ -261,6 +288,7 @@ export default function App() {
           followMouse={followMouse}
           onFollowMouse={(v) => { setFollowMouse(v); writePref("followMouse", v); }}
           onChange={setSettings}
+          onLanguage={changeLanguage}
           onClose={() => setShowSettings(false)}
           onLaunchAtLogin={(v) => helperCall("setLaunchAtLogin", { enabled: v })}
           onOpenLog={() => api.openLog()}

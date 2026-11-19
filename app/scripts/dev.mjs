@@ -1,4 +1,4 @@
-// Modo desenvolvimento: Vite (HMR) + Electron apontando para o dev server.
+// Development mode: Vite (HMR) + Electron pointing at the dev server.
 import { createServer } from "vite";
 import { spawn } from "node:child_process";
 import electronPath from "electron";

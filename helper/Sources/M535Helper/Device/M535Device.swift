@@ -2,7 +2,7 @@ import Foundation
 import IOKit
 import IOKit.hid
 
-/// Control IDs (HID++ ReprogControlsV4) do M535, levantados com diagnostics/m535diag.
+/// M535 Control IDs (HID++ ReprogControlsV4), found with diagnostics/m535diag.
 enum CID {
     static let middle: UInt16 = 0x0052
     static let tiltLeft: UInt16 = 0x00CE
@@ -11,11 +11,11 @@ enum CID {
     static let all: [UInt16] = [middle, tiltLeft, tiltRight, gesture]
 }
 
-/// Flags de setCidReporting (0x1B04 fn 3).
+/// setCidReporting flags (0x1B04 fn 3).
 enum ReportingFlags {
     static let divert: UInt8 = 0x03       // divert + dvalid
     static let divertRawXY: UInt8 = 0x33  // divert + dvalid + rawXY + rvalid
-    static let reset: UInt8 = 0x22        // dvalid + rvalid com ambos desligados (0x02 deixaria o rawXY ligado)
+    static let reset: UInt8 = 0x22        // dvalid + rvalid with both off (0x02 would leave rawXY on)
 }
 
 enum HidppError: Error, CustomStringConvertible {
@@ -26,20 +26,20 @@ enum HidppError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .timeout: return "timeout"
-        case .notConnected: return "desconectado"
-        case .protocolError(let c): return String(format: "erro HID++ 0x%02X", c)
-        case .writeFailed(let r): return String(format: "SetReport falhou 0x%08X", UInt32(bitPattern: r))
+        case .notConnected: return "disconnected"
+        case .protocolError(let c): return String(format: "HID++ error 0x%02X", c)
+        case .writeFailed(let r): return String(format: "SetReport failed 0x%08X", UInt32(bitPattern: r))
         }
     }
 }
 
-/// Conexão com o Logitech M535 via IOHID + HID++ 2.0 (Bluetooth direto, device index 0xFF).
+/// Connection to the Logitech M535 via IOHID + HID++ 2.0 (direct Bluetooth, device index 0xFF).
 ///
-/// Lições do diagnóstico:
-///  - Sempre usar o report LONGO (0x11, 20 bytes): no report curto o firmware lê lixo nos parâmetros
-///    que faltam e responde erro 0x02 aleatoriamente.
-///  - getCidReporting devolve o CID num formato inconsistente → não confiamos em readback;
-///    mantemos o estado desejado e reaplicamos a cada conexão.
+/// Lessons from the diagnostics:
+///  - Always use the LONG report (0x11, 20 bytes): with the short report the firmware reads garbage for
+///    the missing parameters and randomly replies with error 0x02.
+///  - getCidReporting returns the CID in an inconsistent format → we don't trust readback;
+///    we keep the desired state and reapply it on every connection.
 final class M535Device {
     static let vendorID = 0x046D
     static let productID = 0xB016
@@ -50,7 +50,7 @@ final class M535Device {
     var onStateChange: (() -> Void)?
     var onPressed: ((Set<UInt16>) -> Void)?
     var onMotion: ((Int, Int) -> Void)?
-    /// Report 0x02 nativo (não desviado): botões (bit0 esq, bit1 dir, bit2 meio) e roda (+ = para cima).
+    /// Native (non-diverted) report 0x02: buttons (bit0 left, bit1 right, bit2 middle) and wheel (+ = up).
     var onNativeButtons: ((UInt8) -> Void)?
     var onNativeWheel: ((Int) -> Void)?
 
@@ -82,7 +82,7 @@ final class M535Device {
 
     var isConnected: Bool { device != nil }
 
-    // MARK: Ciclo de vida
+    // MARK: Lifecycle
 
     func start() {
         let m = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
@@ -96,13 +96,13 @@ final class M535Device {
             guard let ctx else { return }
             Unmanaged<M535Device>.fromOpaque(ctx).takeUnretainedValue().removed(dev)
         }, ctx)
-        // commonModes: continua recebendo eventos com menus abertos / durante o encerramento.
+        // commonModes: keeps receiving events while menus are open / during shutdown.
         IOHIDManagerScheduleWithRunLoop(m, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
         manager = m
         tryOpen()
     }
 
-    /// Tenta abrir o IOHIDManager (falha sem permissão de Monitoramento de Entrada). Pode ser chamado de novo.
+    /// Tries to open the IOHIDManager (fails without the Input Monitoring permission). Can be called again.
     @discardableResult
     func tryOpen() -> Bool {
         guard let m = manager else { return false }
@@ -110,12 +110,12 @@ final class M535Device {
         let r = IOHIDManagerOpen(m, IOOptionBits(kIOHIDOptionsTypeNone))
         managerOpen = (r == kIOReturnSuccess)
         if managerOpen {
-            Log.info("IOHIDManager aberto")
+            Log.info("IOHIDManager opened")
             loggedOpenFailure = false
             if let set = IOHIDManagerCopyDevices(m) as? Set<IOHIDDevice> { set.forEach(attached) }
         } else if !loggedOpenFailure {
             loggedOpenFailure = true
-            Log.warn(String(format: "IOHIDManagerOpen falhou (0x%08X) — falta Monitoramento de Entrada?", UInt32(bitPattern: r)))
+            Log.warn(String(format: "IOHIDManagerOpen failed (0x%08X) — missing Input Monitoring?", UInt32(bitPattern: r)))
         }
         onStateChange?()
         return managerOpen
@@ -124,12 +124,12 @@ final class M535Device {
     private func attached(_ dev: IOHIDDevice) {
         if let d = device {
             if CFEqual(d, dev) { return }
-            Log.info("Outro M535 encontrado; mantendo o primeiro")
+            Log.info("Another M535 found; keeping the first one")
             return
         }
         let r = IOHIDDeviceOpen(dev, IOOptionBits(kIOHIDOptionsTypeNone))
         guard r == kIOReturnSuccess else {
-            Log.warn(String(format: "IOHIDDeviceOpen falhou (0x%08X)", UInt32(bitPattern: r)))
+            Log.warn(String(format: "IOHIDDeviceOpen failed (0x%08X)", UInt32(bitPattern: r)))
             return
         }
         device = dev
@@ -139,14 +139,14 @@ final class M535Device {
             Unmanaged<M535Device>.fromOpaque(ctx).takeUnretainedValue()
                 .handleReport(Array(UnsafeBufferPointer(start: report, count: len)))
         }, Unmanaged.passUnretained(self).toOpaque())
-        Log.info("Conectado: \(productName ?? "M535")")
+        Log.info("Connected: \(productName ?? "M535")")
         onStateChange?()
         discover()
     }
 
     private func removed(_ dev: IOHIDDevice) {
         guard let d = device, CFEqual(d, dev) else { return }
-        Log.info("Desconectado")
+        Log.info("Disconnected")
         device = nil
         isReady = false
         reprogIndex = nil
@@ -163,12 +163,12 @@ final class M535Device {
         request(0x00, 0, [0x1B, 0x04]) { [weak self] r in
             guard let self else { return }
             guard case .success(let p) = r, let idx = p.first, idx != 0 else {
-                Log.error("ReprogControlsV4 (0x1B04) indisponível: \(r)")
+                Log.error("ReprogControlsV4 (0x1B04) unavailable: \(r)")
                 return
             }
             self.reprogIndex = idx
             self.isReady = true
-            Log.info("HID++ pronto (ReprogControlsV4 no índice \(idx))")
+            Log.info("HID++ ready (ReprogControlsV4 at index \(idx))")
             self.applyDiversion()
             self.onStateChange?()
         }
@@ -193,9 +193,9 @@ final class M535Device {
         }
     }
 
-    // MARK: Desvio de controles
+    // MARK: Control diversion
 
-    /// Define quais CIDs devem ser desviados (cid → flags). CIDs ausentes são restaurados.
+    /// Sets which CIDs should be diverted (cid → flags). Missing CIDs are restored.
     func setDesiredDiversion(_ d: [UInt16: UInt8]) {
         let changed = d != desired
         desired = d
@@ -207,14 +207,14 @@ final class M535Device {
         for cid in CID.all {
             let flags = desired[cid] ?? ReportingFlags.reset
             request(idx, 3, [UInt8(cid >> 8), UInt8(cid & 0xFF), flags, 0, 0]) { r in
-                if case .failure(let e) = r { Log.error(String(format: "setCidReporting 0x%04X falhou: ", cid) + e.description) }
+                if case .failure(let e) = r { Log.error(String(format: "setCidReporting 0x%04X failed: ", cid) + e.description) }
             }
         }
         let desc = desired.keys.sorted().map { String(format: "0x%04X=0x%02X", $0, desired[$0]!) }.joined(separator: " ")
-        Log.info("Desvio aplicado: [\(desc)]")
+        Log.info("Diversion applied: [\(desc)]")
     }
 
-    /// Restaura todos os controles de forma síncrona (usado ao encerrar; não depende do runloop).
+    /// Restores all controls synchronously (used on shutdown; does not depend on the runloop).
     func restoreSync() {
         guard let dev = device, let idx = reprogIndex else { return }
         for cid in CID.all {
@@ -222,7 +222,7 @@ final class M535Device {
             IOHIDDeviceSetReport(dev, kIOHIDReportTypeOutput, CFIndex(Self.longReportID), pkt, pkt.count)
             usleep(30_000)
         }
-        Log.info("Controles restaurados ao padrão de fábrica")
+        Log.info("Controls restored to factory defaults")
     }
 
     // MARK: Reports
@@ -247,7 +247,7 @@ final class M535Device {
             if let idx = reprogIndex, feat == idx, fnSw & 0x0F == 0 {
                 let p = Array(b.dropFirst(4))
                 switch fnSw >> 4 {
-                case 0:  // divertedButtonsEvent: até 4 CIDs pressionados
+                case 0:  // divertedButtonsEvent: up to 4 pressed CIDs
                     var pressed = Set<UInt16>()
                     for i in stride(from: 0, to: min(8, p.count - 1), by: 2) {
                         let c = UInt16(p[i]) << 8 | UInt16(p[i + 1])
@@ -273,18 +273,18 @@ final class M535Device {
             if wheel != 0 { onNativeWheel?(wheel) }
         }
 
-        // Autocorreção: se o atalho nativo do botão de gestos (⌃↑ no report de teclado) ou um clique do meio
-        // desviado chegar pelo caminho HID normal, o mouse perdeu o desvio (ex.: acordou do sleep).
+        // Self-healing: if the gesture button's native shortcut (⌃↑ in the keyboard report) or a diverted middle
+        // click arrives through the normal HID path, the mouse lost the diversion (e.g. it woke from sleep).
         let leakedKeyboard = id == 0x04 && desired[CID.gesture] != nil && b.dropFirst(3).contains { $0 != 0 }
         let leakedMiddle = id == 0x02 && b.count > 1 && b[1] & 0x04 != 0 && desired[CID.middle] != nil
         if (leakedKeyboard || leakedMiddle) && isReady && Date().timeIntervalSince(lastSelfHeal) > 3 {
             lastSelfHeal = Date()
-            Log.warn("Desvio perdido pelo mouse — reaplicando")
+            Log.warn("Mouse lost the diversion — reapplying")
             applyDiversion()
         }
     }
 
-    // MARK: Fila de requests HID++ (um por vez, com timeout)
+    // MARK: HID++ request queue (one at a time, with timeout)
 
     private func packet(_ feature: UInt8, _ function: UInt8, _ params: [UInt8]) -> [UInt8] {
         var p: [UInt8] = [Self.longReportID, Self.deviceIndex, feature, (function << 4) | Self.softwareID] + params

@@ -2,13 +2,13 @@ import AppKit
 import ApplicationServices
 import CoreGraphics
 
-/// Executa ações: atalhos de teclado, ações do sistema, abrir apps/URLs e comandos shell.
-/// Eventos sintéticos exigem permissão de Acessibilidade.
+/// Runs actions: keyboard shortcuts, system actions, opening apps/URLs and shell commands.
+/// Synthetic events require the Accessibility permission.
 final class ActionRunner {
     private let source = CGEventSource(stateID: .hidSystemState)
     private var warnedAX = false
 
-    /// Ações de sistema suportadas (usadas também pela UI).
+    /// Supported system actions (also used by the UI).
     static let systemActions: [String] = [
         "missionControl", "appExpose", "showDesktop", "launchpad",
         "spaceLeft", "spaceRight", "back", "forward",
@@ -22,16 +22,16 @@ final class ActionRunner {
         case "none", "default": return
         case "system": runSystem(a.action ?? "")
         case "keystroke":
-            guard let k = a.keyCode else { Log.warn("keystroke sem keyCode"); return }
+            guard let k = a.keyCode else { Log.warn("keystroke without keyCode"); return }
             key(CGKeyCode(k), Self.flags(a.modifiers ?? []))
         case "openApp": openApp(a)
         case "openURL": openURL(a.url)
         case "shell": shell(a.command)
-        default: Log.warn("Tipo de ação desconhecido: \(a.type)")
+        default: Log.warn("Unknown action type: \(a.type)")
         }
     }
 
-    // MARK: Sistema
+    // MARK: System
 
     private func runSystem(_ name: String) {
         switch name {
@@ -63,15 +63,15 @@ final class ActionRunner {
         case "volumeUp": media(0)
         case "volumeDown": media(1)
         case "mute": media(7)
-        default: Log.warn("Ação de sistema desconhecida: \(name)")
+        default: Log.warn("Unknown system action: \(name)")
         }
     }
 
     private typealias CoreDockSendNotificationFn = @convention(c) (CFString, Int32) -> Void
     private lazy var coreDockSend: CoreDockSendNotificationFn? = {
-        // RTLD_DEFAULT == (void*)-2 no macOS. API privada do Dock (usada por Mac Mouse Fix e similares).
+        // RTLD_DEFAULT == (void*)-2 on macOS. Private Dock API (used by Mac Mouse Fix and similar tools).
         guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CoreDockSendNotification") else {
-            Log.warn("CoreDockSendNotification indisponível; usando alternativas")
+            Log.warn("CoreDockSendNotification unavailable; using fallbacks")
             return nil
         }
         return unsafeBitCast(sym, to: CoreDockSendNotificationFn.self)
@@ -83,7 +83,7 @@ final class ActionRunner {
         return true
     }
 
-    // MARK: Eventos sintéticos
+    // MARK: Synthetic events
 
     static func flags(_ mods: [String]) -> CGEventFlags {
         var f = CGEventFlags()
@@ -103,14 +103,14 @@ final class ActionRunner {
     private func checkAX() {
         if !warnedAX && !AXIsProcessTrusted() {
             warnedAX = true
-            Log.warn("Sem permissão de Acessibilidade: atalhos e cliques sintéticos serão ignorados pelo sistema")
+            Log.warn("No Accessibility permission: synthetic shortcuts and clicks will be ignored by the system")
         }
     }
 
     func key(_ code: CGKeyCode, _ flags: CGEventFlags) {
         checkAX()
         var f = flags
-        if (123...126).contains(code) { f.formUnion([.maskSecondaryFn, .maskNumericPad]) }  // setas
+        if (123...126).contains(code) { f.formUnion([.maskSecondaryFn, .maskNumericPad]) }  // arrows
         for down in [true, false] {
             guard let e = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else { continue }
             e.flags = f
@@ -144,10 +144,10 @@ final class ActionRunner {
         if let b = a.bundleId { url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: b) }
         if url == nil, let p = a.path { url = URL(fileURLWithPath: (p as NSString).expandingTildeInPath) }
         guard let appURL = url else {
-            Log.warn("App não encontrado: \(a.bundleId ?? a.path ?? "?")")
+            Log.warn("App not found: \(a.bundleId ?? a.path ?? "?")")
             return
         }
-        // toggle: se o app já está na frente, esconde (como um atalho "mostrar/ocultar").
+        // toggle: if the app is already frontmost, hide it (like a "show/hide" shortcut).
         if a.toggle == true, let front = NSWorkspace.shared.frontmostApplication,
            front.bundleURL?.standardizedFileURL == appURL.standardizedFileURL || (a.bundleId != nil && front.bundleIdentifier == a.bundleId) {
             front.hide()
@@ -160,7 +160,7 @@ final class ActionRunner {
         let cfg = NSWorkspace.OpenConfiguration()
         cfg.activates = true
         NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: path), configuration: cfg) { _, err in
-            if let err { DispatchQueue.main.async { Log.error("Falha ao abrir \(path): \(err.localizedDescription)") } }
+            if let err { DispatchQueue.main.async { Log.error("Failed to open \(path): \(err.localizedDescription)") } }
         }
     }
 
@@ -172,7 +172,7 @@ final class ActionRunner {
         } else {
             url = URL(string: s)
         }
-        guard let url else { Log.warn("URL inválida: \(s)"); return }
+        guard let url else { Log.warn("Invalid URL: \(s)"); return }
         NSWorkspace.shared.open(url)
     }
 
@@ -184,6 +184,6 @@ final class ActionRunner {
         p.standardInput = FileHandle.nullDevice
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
-        do { try p.run() } catch { Log.error("Falha ao executar comando: \(error)") }
+        do { try p.run() } catch { Log.error("Failed to run command: \(error)") }
     }
 }

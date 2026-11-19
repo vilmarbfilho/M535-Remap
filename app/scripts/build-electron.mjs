@@ -1,4 +1,4 @@
-// Compila o processo main e o preload do Electron (CJS, com dependências embutidas).
+// Builds the Electron main process and preload (CJS, with dependencies bundled).
 import { build } from "esbuild";
 import { pathToFileURL } from "node:url";
 
@@ -18,5 +18,5 @@ export async function buildElectron({ dev = false } = {}) {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   await buildElectron();
-  console.log("✓ dist-electron/ gerado");
+  console.log("✓ dist-electron/ built");
 }

@@ -1,21 +1,21 @@
 import Foundation
 
-/// Controles lógicos que podem receber uma ação.
+/// Logical controls that can be assigned an action.
 enum Control: String, CaseIterable {
     case gestureClick, gestureUp, gestureDown, gestureLeft, gestureRight
     case tiltLeft, tiltRight
     case middleClick
 }
 
-/// Uma ação configurável. Formato JSON "achatado" para casar com a união discriminada do frontend (TS).
+/// A configurable action. "Flattened" JSON format to match the frontend's (TS) discriminated union.
 ///
 ///   {"type":"none"}
-///   {"type":"default"}                                          // comportamento nativo (só clique na roda)
+///   {"type":"default"}                                          // native behavior (wheel click only)
 ///   {"type":"system","action":"missionControl"}
 ///   {"type":"keystroke","keyCode":8,"modifiers":["cmd"],"keyLabel":"C"}
 ///   {"type":"openApp","bundleId":"com.apple.Terminal","name":"Terminal","toggle":true}
-///   {"type":"openURL","url":"https://example.com"}              // também aceita caminhos de arquivo/pasta
-///   {"type":"shell","command":"say olá"}
+///   {"type":"openURL","url":"https://example.com"}              // also accepts file/folder paths
+///   {"type":"shell","command":"say hello"}
 struct Action: Codable, Equatable {
     var type: String
     var action: String?
@@ -49,19 +49,21 @@ struct Action: Codable, Equatable {
 
 struct Settings: Codable, Equatable {
     var enabled = true
-    /// Deslocamento mínimo (unidades raw do sensor) para um clique virar gesto.
+    /// Minimum displacement (raw sensor units) for a click to become a gesture.
     var gestureThreshold = 50
-    /// Repetição da ação enquanto o tilt fica inclinado. 0 = sem repetição.
+    /// Repeats the action while the wheel stays tilted. 0 = no repeat.
     var tiltRepeatIntervalMs = 0
     var tiltRepeatDelayMs = 400
+    /// UI language chosen in the settings app ("en", "pt-BR"). nil = follow the system language.
+    var language: String? = nil
 }
 
 struct Profile: Codable, Equatable {
     var id: String
     var name: String
-    /// Bundle IDs dos apps em que este perfil fica ativo. Vazio no perfil "default".
+    /// Bundle IDs of the apps in which this profile is active. Empty for the "default" profile.
     var apps: [String] = []
-    /// Chave = Control.rawValue. Controles ausentes herdam do perfil "default".
+    /// Key = Control.rawValue. Missing controls inherit from the "default" profile.
     var bindings: [String: Action] = [:]
 }
 
@@ -71,7 +73,7 @@ struct Config: Codable, Equatable {
     var profiles: [Profile] = []
 }
 
-// Decodificação tolerante: chaves ausentes assumem o padrão (decoders em extensões preservam os inits padrão).
+// Lenient decoding: missing keys take the default (decoders in extensions keep the memberwise inits).
 extension Settings {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -80,6 +82,7 @@ extension Settings {
         gestureThreshold = try c.decodeIfPresent(Int.self, forKey: .gestureThreshold) ?? d.gestureThreshold
         tiltRepeatIntervalMs = try c.decodeIfPresent(Int.self, forKey: .tiltRepeatIntervalMs) ?? d.tiltRepeatIntervalMs
         tiltRepeatDelayMs = try c.decodeIfPresent(Int.self, forKey: .tiltRepeatDelayMs) ?? d.tiltRepeatDelayMs
+        language = try c.decodeIfPresent(String.self, forKey: .language)
     }
 }
 
@@ -115,7 +118,7 @@ extension Config {
     static var defaults: Config {
         var c = Config()
         let bindings = Dictionary(uniqueKeysWithValues: builtInBindings.map { ($0.key.rawValue, $0.value) })
-        c.profiles = [Profile(id: "default", name: "Padrão", apps: [], bindings: bindings)]
+        c.profiles = [Profile(id: "default", name: Strings.forLanguage(nil).defaultProfileName, apps: [], bindings: bindings)]
         return c
     }
 
@@ -132,7 +135,7 @@ extension Config {
         return Config.builtInBindings[control] ?? .none
     }
 
-    /// O clique na roda só é desviado se algum perfil o remapear; senão fica 100% nativo.
+    /// The wheel click is only diverted if some profile remaps it; otherwise it stays 100% native.
     var needsMiddleDivert: Bool {
         profiles.contains { ($0.bindings[Control.middleClick.rawValue]?.type ?? "default") != "default" }
     }

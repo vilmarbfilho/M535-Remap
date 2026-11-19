@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { ConfigSchema, defaultConfig, type Config } from "../src/shared/schema";
+import { isLanguage, languageFromLocale, MESSAGES, type Language } from "../src/shared/i18n";
 import { HelperClient } from "./helperClient";
 
 const execFileP = promisify(execFile);
@@ -17,7 +18,7 @@ const HELPER_BUNDLE_ID = "com.m535remap.helper";
 const HELPER_APP_PATH = path.join(os.homedir(), "Applications/M535 Remap Helper.app");
 const BUNDLED_HELPER = path.join(process.resourcesPath, "M535 Remap Helper.app");
 
-/** Desinstalador: no app empacotado vem em Resources; em desenvolvimento, do repositório. */
+/** Uninstaller: in the packaged app it lives in Resources; in development, in the repository. */
 function uninstallScript(): string {
   return app.isPackaged ? path.join(process.resourcesPath, "uninstall.sh") : path.resolve(app.getAppPath(), "../scripts/uninstall.sh");
 }
@@ -25,7 +26,10 @@ function uninstallScript(): string {
 let win: BrowserWindow | null = null;
 let recording = false;
 let lastWritten = "";
-const helper = new HelperClient(SOCKET_PATH);
+// UI language: set by the renderer (Settings → Language); until then, follows the system locale.
+let language: Language = "en";
+const m = () => MESSAGES[language].main;
+const helper = new HelperClient(SOCKET_PATH, m);
 
 // MARK: config.json
 
@@ -39,9 +43,9 @@ function readConfig(): { config: Config; error?: string } {
   try {
     const parsed = ConfigSchema.safeParse(JSON.parse(raw));
     if (parsed.success) return { config: parsed.data };
-    return { config: defaultConfig(), error: "config.json inválido: " + parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
+    return { config: defaultConfig(), error: m().invalidConfig(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")) };
   } catch (e) {
-    return { config: defaultConfig(), error: "config.json não é um JSON válido: " + (e as Error).message };
+    return { config: defaultConfig(), error: m().invalidJson((e as Error).message) };
   }
 }
 
@@ -52,12 +56,12 @@ function writeConfig(c: unknown): { ok: boolean; error?: string } {
   fs.mkdirSync(SUPPORT_DIR, { recursive: true });
   const tmp = CONFIG_PATH + ".tmp";
   fs.writeFileSync(tmp, text, "utf8");
-  fs.renameSync(tmp, CONFIG_PATH); // atômico: o helper recarrega ao ver o diretório mudar
+  fs.renameSync(tmp, CONFIG_PATH); // atomic: the helper reloads when it sees the directory change
   lastWritten = text;
   return { ok: true };
 }
 
-/** Avisa a UI quando o config.json muda por fora (ex.: "Remapeamento ativo" no menu do helper). */
+/** Notifies the UI when config.json changes externally (e.g. "Remapping enabled" in the helper menu). */
 function watchConfig() {
   fs.mkdirSync(SUPPORT_DIR, { recursive: true });
   let t: NodeJS.Timeout | undefined;
@@ -85,9 +89,9 @@ async function appInfoFromPath(appPath: string): Promise<AppInfo | null> {
   try {
     const { stdout } = await execFileP("/usr/bin/plutil", ["-convert", "json", "-o", "-", path.join(appPath, "Contents/Info.plist")]);
     plist = JSON.parse(stdout);
-  } catch { /* alguns apps têm plist binário ilegível; seguimos só com o nome */ }
+  } catch { /* some apps have an unreadable binary plist; carry on with just the name */ }
   let icon: string | undefined;
-  try { icon = (await app.getFileIcon(appPath, { size: "large" })).toDataURL(); } catch { /* sem ícone */ }
+  try { icon = (await app.getFileIcon(appPath, { size: "large" })).toDataURL(); } catch { /* no icon */ }
   return {
     bundleId: plist.CFBundleIdentifier,
     name: plist.CFBundleDisplayName || plist.CFBundleName || path.basename(appPath, ".app"),
@@ -126,7 +130,7 @@ async function launchHelper(): Promise<boolean> {
   return true;
 }
 
-// MARK: instalação / desinstalação
+// MARK: install / uninstall
 
 async function cdHash(appPath: string): Promise<string | null> {
   try {
@@ -151,7 +155,7 @@ interface InstallInfo {
   installedVersion: string | null;
   bundled: boolean;
   bundledVersion: string | null;
-  /** null quando não há helper embutido para comparar (modo desenvolvimento). */
+  /** null when there's no bundled helper to compare against (development mode). */
   upToDate: boolean | null;
   canUninstall: boolean;
 }
@@ -162,7 +166,7 @@ async function installInfo(): Promise<InstallInfo> {
   let upToDate: boolean | null = null;
   if (installed && bundled) {
     const [a, b] = await Promise.all([cdHash(HELPER_APP_PATH), cdHash(BUNDLED_HELPER)]);
-    upToDate = !!a && a === b; // CDHash: mesmo código, independente de quando foi assinado
+    upToDate = !!a && a === b; // CDHash: same code, regardless of when it was signed
   }
   return {
     installed,
@@ -180,11 +184,11 @@ async function helperRunning(): Promise<boolean> {
   try { await execFileP("/usr/bin/pgrep", ["-x", "M535Helper"]); return true; } catch { return false; }
 }
 
-/** Copia o helper embutido para ~/Applications (encerrando o antigo, que restaura o mouse) e o inicia. */
+/** Copies the bundled helper to ~/Applications (quitting the old one, which restores the mouse) and starts it. */
 async function installHelper(): Promise<InstallInfo> {
-  if (!fs.existsSync(BUNDLED_HELPER)) throw new Error("Este build não contém o helper embutido (use npm run package).");
+  if (!fs.existsSync(BUNDLED_HELPER)) throw new Error(m().noBundledHelper);
   if (await helperRunning()) {
-    try { await execFileP("/usr/bin/pkill", ["-TERM", "-x", "M535Helper"]); } catch { /* já saiu */ }
+    try { await execFileP("/usr/bin/pkill", ["-TERM", "-x", "M535Helper"]); } catch { /* already exited */ }
     for (let i = 0; i < 20 && (await helperRunning()); i++) await sleep(250);
   }
   fs.mkdirSync(path.dirname(HELPER_APP_PATH), { recursive: true });
@@ -195,22 +199,19 @@ async function installHelper(): Promise<InstallInfo> {
   return installInfo();
 }
 
-/** Pede confirmação e executa o desinstalador destacado; o app se fecha para poder ser removido. */
+/** Asks for confirmation and runs the detached uninstaller; the app quits so it can be removed. */
 async function uninstall(): Promise<boolean> {
   if (!win) return false;
   const script = uninstallScript();
-  if (!fs.existsSync(script)) throw new Error("Desinstalador não encontrado: " + script);
+  if (!fs.existsSync(script)) throw new Error(m().uninstallerNotFound(script));
   const r = await dialog.showMessageBox(win, {
     type: "warning",
-    message: "Desinstalar o M535 Remap?",
-    detail:
-      "Serão removidos: o M535 Remap Helper e " + (app.isPackaged ? "este app" : "(em desenvolvimento, este app é mantido)") +
-      ", a configuração, os logs, as preferências, o item de login e as permissões.\n\n" +
-      "O helper é encerrado antes, devolvendo o mouse ao padrão de fábrica. O código do projeto não é afetado.",
-    buttons: ["Desinstalar", "Cancelar"],
+    message: m().uninstallTitle,
+    detail: m().uninstallDetail(app.isPackaged),
+    buttons: [m().uninstall, m().cancel],
     defaultId: 1,
     cancelId: 1,
-    checkboxLabel: "Remover também o certificado de assinatura (só se não for mais compilar o projeto)",
+    checkboxLabel: m().removeCert,
     checkboxChecked: false,
   });
   if (r.response !== 0) return false;
@@ -229,7 +230,7 @@ async function uninstall(): Promise<boolean> {
 
 const ALLOWED_METHODS = new Set(["status", "setEnabled", "runAction", "requestPermission", "setLaunchAtLogin", "reloadConfig"]);
 
-// MARK: janela
+// MARK: window
 
 function createWindow() {
   win = new BrowserWindow({
@@ -258,7 +259,7 @@ function createWindow() {
 
   win.once("ready-to-show", () => win?.show());
 
-  // Desenvolvimento: M535_SCREENSHOT=/caminho.png [M535_THEME=dark|light] renderiza a janela num PNG e sai.
+  // Development: M535_SCREENSHOT=/path.png [M535_THEME=dark|light] renders the window to a PNG and quits.
   const shot = process.env.M535_SCREENSHOT;
   if (shot) {
     if (process.env.M535_THEME === "dark" || process.env.M535_THEME === "light") nativeTheme.themeSource = process.env.M535_THEME;
@@ -276,7 +277,7 @@ function createWindow() {
     return { action: "deny" };
   });
 
-  // Gravação de atalho: intercepta antes dos atalhos de menu (⌘W, ⌘Q…) e do próprio renderer.
+  // Shortcut recording: intercepts keys before menu shortcuts (⌘W, ⌘Q…) and the renderer itself.
   win.webContents.on("before-input-event", (event, input) => {
     if (!recording || input.type !== "keyDown") return;
     event.preventDefault();
@@ -291,7 +292,7 @@ function registerIpc() {
   ipcMain.handle("config:save", (_e, c: unknown) => writeConfig(c));
   ipcMain.handle("helper:state", () => ({ connected: helper.connected, status: helper.lastStatus }));
   ipcMain.handle("helper:call", async (_e, method: string, params?: Record<string, unknown>) => {
-    if (!ALLOWED_METHODS.has(method)) throw new Error("método não permitido");
+    if (!ALLOWED_METHODS.has(method)) throw new Error(m().methodNotAllowed);
     return helper.call(method, params ?? {});
   });
   ipcMain.handle("helper:launch", () => launchHelper());
@@ -301,10 +302,10 @@ function registerIpc() {
   ipcMain.handle("app:pick", async () => {
     if (!win) return null;
     const r = await dialog.showOpenDialog(win, {
-      title: "Escolha um aplicativo",
+      title: m().chooseApp,
       defaultPath: "/Applications",
       properties: ["openFile"],
-      filters: [{ name: "Aplicativos", extensions: ["app"] }],
+      filters: [{ name: m().applications, extensions: ["app"] }],
     });
     if (r.canceled || !r.filePaths[0]) return null;
     const info = await appInfoFromPath(r.filePaths[0]);
@@ -314,12 +315,13 @@ function registerIpc() {
   ipcMain.handle("app:info", (_e, idOrPath: string) => appInfo(idOrPath));
   ipcMain.handle("file:pick", async () => {
     if (!win) return null;
-    const r = await dialog.showOpenDialog(win, { title: "Escolha um arquivo ou pasta", properties: ["openFile", "openDirectory"] });
+    const r = await dialog.showOpenDialog(win, { title: m().chooseFile, properties: ["openFile", "openDirectory"] });
     return r.canceled ? null : r.filePaths[0] ?? null;
   });
   ipcMain.handle("recorder:set", (_e, on: boolean) => { recording = !!on; });
   ipcMain.handle("shell:openLog", () => shell.openPath(LOG_PATH));
   ipcMain.handle("shell:openConfigFolder", () => shell.openPath(SUPPORT_DIR));
+  ipcMain.handle("app:setLanguage", (_e, lang: unknown) => { if (isLanguage(lang)) language = lang; });
 
   helper.on("event", (e) => win?.webContents.send("helper:event", e));
   helper.on("connection", (c: boolean) => win?.webContents.send("helper:connection", c));
@@ -332,13 +334,14 @@ if (!app.requestSingleInstanceLock()) {
     if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
   });
   app.whenReady().then(() => {
-    try { lastWritten = fs.readFileSync(CONFIG_PATH, "utf8"); } catch { /* ainda não existe */ }
+    try { lastWritten = fs.readFileSync(CONFIG_PATH, "utf8"); } catch { /* doesn't exist yet */ }
+    language = languageFromLocale(app.getLocale());
     registerIpc();
     watchConfig();
     helper.start();
     createWindow();
     app.on("activate", () => { if (!win) createWindow(); });
   });
-  app.on("window-all-closed", () => app.quit()); // o remapeamento continua no helper
+  app.on("window-all-closed", () => app.quit()); // remapping keeps running in the helper
   app.on("before-quit", () => helper.stop());
 }
