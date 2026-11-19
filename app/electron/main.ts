@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from "electron";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,6 +15,12 @@ const SOCKET_PATH = path.join(SUPPORT_DIR, "helper.sock");
 const LOG_PATH = path.join(os.homedir(), "Library/Logs/M535Remap/helper.log");
 const HELPER_BUNDLE_ID = "com.m535remap.helper";
 const HELPER_APP_PATH = path.join(os.homedir(), "Applications/M535 Remap Helper.app");
+const BUNDLED_HELPER = path.join(process.resourcesPath, "M535 Remap Helper.app");
+
+/** Desinstalador: no app empacotado vem em Resources; em desenvolvimento, do repositório. */
+function uninstallScript(): string {
+  return app.isPackaged ? path.join(process.resourcesPath, "uninstall.sh") : path.resolve(app.getAppPath(), "../scripts/uninstall.sh");
+}
 
 let win: BrowserWindow | null = null;
 let recording = false;
@@ -120,6 +126,107 @@ async function launchHelper(): Promise<boolean> {
   return true;
 }
 
+// MARK: instalação / desinstalação
+
+async function cdHash(appPath: string): Promise<string | null> {
+  try {
+    const { stderr } = await execFileP("/usr/bin/codesign", ["-dvvv", appPath]);
+    return /CDHash=([0-9a-f]+)/.exec(stderr)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function plistVersion(appPath: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileP("/usr/libexec/PlistBuddy", ["-c", "Print CFBundleShortVersionString", path.join(appPath, "Contents/Info.plist")]);
+    return stdout.trim();
+  } catch {
+    return null;
+  }
+}
+
+interface InstallInfo {
+  installed: boolean;
+  installedVersion: string | null;
+  bundled: boolean;
+  bundledVersion: string | null;
+  /** null quando não há helper embutido para comparar (modo desenvolvimento). */
+  upToDate: boolean | null;
+  canUninstall: boolean;
+}
+
+async function installInfo(): Promise<InstallInfo> {
+  const installed = fs.existsSync(HELPER_APP_PATH);
+  const bundled = app.isPackaged && fs.existsSync(BUNDLED_HELPER);
+  let upToDate: boolean | null = null;
+  if (installed && bundled) {
+    const [a, b] = await Promise.all([cdHash(HELPER_APP_PATH), cdHash(BUNDLED_HELPER)]);
+    upToDate = !!a && a === b; // CDHash: mesmo código, independente de quando foi assinado
+  }
+  return {
+    installed,
+    installedVersion: installed ? await plistVersion(HELPER_APP_PATH) : null,
+    bundled,
+    bundledVersion: bundled ? await plistVersion(BUNDLED_HELPER) : null,
+    upToDate,
+    canUninstall: fs.existsSync(uninstallScript()),
+  };
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function helperRunning(): Promise<boolean> {
+  try { await execFileP("/usr/bin/pgrep", ["-x", "M535Helper"]); return true; } catch { return false; }
+}
+
+/** Copia o helper embutido para ~/Applications (encerrando o antigo, que restaura o mouse) e o inicia. */
+async function installHelper(): Promise<InstallInfo> {
+  if (!fs.existsSync(BUNDLED_HELPER)) throw new Error("Este build não contém o helper embutido (use npm run package).");
+  if (await helperRunning()) {
+    try { await execFileP("/usr/bin/pkill", ["-TERM", "-x", "M535Helper"]); } catch { /* já saiu */ }
+    for (let i = 0; i < 20 && (await helperRunning()); i++) await sleep(250);
+  }
+  fs.mkdirSync(path.dirname(HELPER_APP_PATH), { recursive: true });
+  fs.rmSync(HELPER_APP_PATH, { recursive: true, force: true });
+  fs.cpSync(BUNDLED_HELPER, HELPER_APP_PATH, { recursive: true, verbatimSymlinks: true });
+  await execFileP("/usr/bin/open", [HELPER_APP_PATH]);
+  setTimeout(() => helper.poke(), 800);
+  return installInfo();
+}
+
+/** Pede confirmação e executa o desinstalador destacado; o app se fecha para poder ser removido. */
+async function uninstall(): Promise<boolean> {
+  if (!win) return false;
+  const script = uninstallScript();
+  if (!fs.existsSync(script)) throw new Error("Desinstalador não encontrado: " + script);
+  const r = await dialog.showMessageBox(win, {
+    type: "warning",
+    message: "Desinstalar o M535 Remap?",
+    detail:
+      "Serão removidos: o M535 Remap Helper e " + (app.isPackaged ? "este app" : "(em desenvolvimento, este app é mantido)") +
+      ", a configuração, os logs, as preferências, o item de login e as permissões.\n\n" +
+      "O helper é encerrado antes, devolvendo o mouse ao padrão de fábrica. O código do projeto não é afetado.",
+    buttons: ["Desinstalar", "Cancelar"],
+    defaultId: 1,
+    cancelId: 1,
+    checkboxLabel: "Remover também o certificado de assinatura (só se não for mais compilar o projeto)",
+    checkboxChecked: false,
+  });
+  if (r.response !== 0) return false;
+
+  const args = [script, "--yes", "--wait-pid", String(process.pid)];
+  if (app.isPackaged) args.push("--ui-app", path.resolve(process.execPath, "../../.."));
+  else args.push("--keep-ui");
+  if (r.checkboxChecked) args.push("--remove-cert");
+  const logFile = path.join(os.tmpdir(), "m535remap-uninstall.log");
+  const out = fs.openSync(logFile, "w");
+  spawn("/bin/bash", args, { detached: true, stdio: ["ignore", out, out] }).unref();
+  helper.stop();
+  setTimeout(() => app.quit(), 300);
+  return true;
+}
+
 const ALLOWED_METHODS = new Set(["status", "setEnabled", "runAction", "requestPermission", "setLaunchAtLogin", "reloadConfig"]);
 
 // MARK: janela
@@ -147,7 +254,7 @@ function createWindow() {
 
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) win.loadURL(devUrl);
-  else win.loadFile(path.join(__dirname, "../dist/index.html"));
+  else win.loadFile(path.join(__dirname, "../dist/index.html"), { hash: process.env.M535_HASH ?? "" });
 
   win.once("ready-to-show", () => win?.show());
 
@@ -188,6 +295,9 @@ function registerIpc() {
     return helper.call(method, params ?? {});
   });
   ipcMain.handle("helper:launch", () => launchHelper());
+  ipcMain.handle("install:info", () => installInfo());
+  ipcMain.handle("install:helper", () => installHelper());
+  ipcMain.handle("install:uninstall", () => uninstall());
   ipcMain.handle("app:pick", async () => {
     if (!win) return null;
     const r = await dialog.showOpenDialog(win, {

@@ -21,6 +21,15 @@ export interface HelperStatus {
   systemActions: string[];
 }
 
+export interface InstallInfo {
+  installed: boolean;
+  installedVersion: string | null;
+  bundled: boolean;
+  bundledVersion: string | null;
+  upToDate: boolean | null;
+  canUninstall: boolean;
+}
+
 export interface HelperEvent { event: string; data: any }
 export interface RecorderKey { code: string; key: string; shift: boolean; control: boolean; alt: boolean; meta: boolean }
 
@@ -30,6 +39,9 @@ export interface M535Api {
   helperState(): Promise<{ connected: boolean; status: HelperStatus | null }>;
   helperCall(method: string, params?: Record<string, unknown>): Promise<unknown>;
   launchHelper(): Promise<boolean>;
+  installInfo(): Promise<InstallInfo>;
+  installHelper(): Promise<InstallInfo>;
+  uninstall(): Promise<boolean>;
   pickApp(): Promise<AppInfo | null>;
   appInfo(idOrPath: string): Promise<AppInfo | null>;
   pickFile(): Promise<string | null>;

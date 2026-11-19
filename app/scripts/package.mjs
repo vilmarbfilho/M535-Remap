@@ -7,6 +7,11 @@ import path from "node:path";
 
 const IDENTITY = "M535Remap Local Signing";
 const out = path.resolve("../build");
+const helperApp = path.join(out, "M535 Remap Helper.app");
+
+// O app leva o helper e o desinstalador dentro de Contents/Resources (instala/atualiza/desinstala pela UI).
+console.log("→ Compilando o helper");
+execFileSync("bash", [path.resolve("../scripts/build-helper.sh")], { stdio: "inherit" });
 const [appDir] = await packager({
   dir: ".",
   out,
@@ -18,6 +23,7 @@ const [appDir] = await packager({
   overwrite: true,
   asar: true,
   prune: true,
+  extraResource: [helperApp, path.resolve("../scripts/uninstall.sh")],
   // O main/preload/renderer já estão empacotados por esbuild/vite: só dist* e package.json são necessários.
   ignore: [/^\/(src|electron|scripts|node_modules|public|build-resources)(\/|$)/, /^\/(tsconfig\.json|vite\.config\.ts|index\.html)$/],
 });

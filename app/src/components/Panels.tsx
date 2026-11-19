@@ -1,18 +1,26 @@
-import { Battery, BatteryLow, FileText, FolderOpen, Power, ShieldAlert, TriangleAlert, X } from "lucide-react";
-import type { HelperStatus } from "../lib/api";
+import { Battery, BatteryLow, Download, FileText, FolderOpen, Power, RefreshCw, ShieldAlert, Trash2, TriangleAlert, X } from "lucide-react";
+import type { HelperStatus, InstallInfo } from "../lib/api";
 import type { Settings } from "../shared/schema";
 import { Button, cx, SectionLabel, Toggle } from "./ui";
 
 /** Avisos no topo: helper offline, permissões pendentes, config inválido. */
-export function Banners({ connected, status, configError, onLaunch, onPermission }: {
+export function Banners({ connected, status, configError, install, busy, onLaunch, onInstall, onPermission }: {
   connected: boolean;
   status: HelperStatus | null;
   configError?: string;
+  install: InstallInfo | null;
+  busy: boolean;
   onLaunch: () => void;
+  onInstall: () => void;
   onPermission: (kind: "inputMonitoring" | "accessibility") => void;
 }) {
   const items: React.ReactNode[] = [];
-  if (!connected) {
+  if (!connected && install && !install.installed && install.bundled) {
+    items.push(
+      <Banner key="inst" icon={<Download className="h-4 w-4" />} text="O M535 Remap Helper ainda não está instalado — é ele que remapeia os botões em segundo plano."
+        action={<Button variant="primary" disabled={busy} onClick={onInstall}>{busy ? "Instalando…" : "Instalar helper"}</Button>} />,
+    );
+  } else if (!connected) {
     items.push(
       <Banner key="off" icon={<Power className="h-4 w-4" />} text="O helper não está rodando — os botões do mouse não serão remapeados."
         action={<Button variant="primary" onClick={onLaunch}>Iniciar helper</Button>} />,
@@ -26,6 +34,10 @@ export function Banners({ connected, status, configError, onLaunch, onPermission
         action={<Button onClick={() => onPermission("accessibility")}>Abrir Ajustes</Button>} />);
     if (status.inputMonitoring && !status.hidOpen)
       items.push(<Banner key="hid" icon={<TriangleAlert className="h-4 w-4" />} text="Permissão concedida — reinicie o helper pelo menu da barra (Reiniciar helper) para aplicá-la." />);
+  }
+  if (connected && install?.upToDate === false) {
+    items.push(<Banner key="upd" icon={<RefreshCw className="h-4 w-4" />} text="Este app traz uma versão mais nova do helper."
+      action={<Button disabled={busy} onClick={onInstall}>{busy ? "Atualizando…" : "Atualizar helper"}</Button>} />);
   }
   if (configError) items.push(<Banner key="cfg" icon={<TriangleAlert className="h-4 w-4" />} text={configError} />);
   if (!items.length) return null;
@@ -64,7 +76,11 @@ export function DeviceStatus({ connected, status, saveState }: { connected: bool
   );
 }
 
-export function SettingsSheet({ settings, status, connected, followMouse, onFollowMouse, onChange, onClose, onLaunchAtLogin, onOpenLog, onOpenFolder }: {
+export function SettingsSheet({ settings, status, connected, followMouse, onFollowMouse, onChange, onClose, onLaunchAtLogin, onOpenLog, onOpenFolder, install, busy, onInstall, onUninstall }: {
+  install: InstallInfo | null;
+  busy: boolean;
+  onInstall: () => void;
+  onUninstall: () => void;
   settings: Settings;
   status: HelperStatus | null;
   connected: boolean;
@@ -125,11 +141,41 @@ export function SettingsSheet({ settings, status, connected, followMouse, onFoll
             <Button onClick={onOpenLog}><FileText className="h-3.5 w-3.5" /> Log do helper</Button>
             <Button onClick={onOpenFolder}><FolderOpen className="h-3.5 w-3.5" /> Pasta da configuração</Button>
           </div>
+          <div className="border-t border-line pt-4">
+            <SectionLabel>Instalação</SectionLabel>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[12px]">
+                <div className="font-medium">M535 Remap Helper</div>
+                <div className="text-[11px] text-muted">{installText(install)}</div>
+              </div>
+              {install?.bundled && (
+                <Button disabled={busy} onClick={onInstall}>
+                  {install.installed ? <RefreshCw className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+                  {busy ? "Aguarde…" : !install.installed ? "Instalar" : install.upToDate === false ? "Atualizar" : "Reinstalar"}
+                </Button>
+              )}
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <div className="text-[11px] text-muted">Remove apps, configuração, logs, item de login e permissões.</div>
+              <Button variant="danger" disabled={busy || !install?.canUninstall} onClick={onUninstall}>
+                <Trash2 className="h-3.5 w-3.5" /> Desinstalar…
+              </Button>
+            </div>
+          </div>
           {status && <p className="text-[11px] text-faint">Helper {status.version} · {status.configPath}</p>}
         </div>
       </div>
     </div>
   );
+}
+
+function installText(i: InstallInfo | null): string {
+  if (!i) return "Verificando…";
+  if (!i.installed) return i.bundled ? "Não instalado" : "Não instalado (empacote o app com npm run package)";
+  const v = i.installedVersion ? `v${i.installedVersion}` : "instalado";
+  if (i.upToDate === false) return `${v} · atualização disponível (v${i.bundledVersion})`;
+  if (i.upToDate === true) return `${v} · atualizado`;
+  return `${v} · em ~/Applications`;
 }
 
 function Row({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {

@@ -5,7 +5,7 @@ import {
   type Action, type Config, type ControlId, type SelectableId, type Settings,
 } from "./shared/schema";
 import { describeAction } from "./data/actions";
-import { api, primeAppInfo, type HelperEvent, type HelperStatus } from "./lib/api";
+import { api, primeAppInfo, type HelperEvent, type HelperStatus, type InstallInfo } from "./lib/api";
 import { GesturePad, MouseDiagram } from "./components/MouseDiagram";
 import { ActionEditor } from "./components/ActionEditor";
 import { Sidebar } from "./components/Sidebar";
@@ -36,7 +36,9 @@ export default function App() {
   const scrollTimer = useRef<number | undefined>(undefined);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const [saveState, setSaveState] = useState("Configuração salva");
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(() => location.hash === "#settings");
+  const [install, setInstall] = useState<InstallInfo | null>(null);
+  const [installBusy, setInstallBusy] = useState(false);
   const [followMouse, setFollowMouse] = useState(() => readPref("followMouse", true));
 
   const saveTimer = useRef<number | undefined>(undefined);
@@ -50,6 +52,7 @@ export default function App() {
   useEffect(() => {
     api.loadConfig().then((r) => { setConfig(r.config); configRef.current = r.config; setConfigError(r.error); });
     api.helperState().then((s) => { setConnected(s.connected); setStatus(s.status); });
+    api.installInfo().then(setInstall).catch(() => {});
     const offConn = api.onHelperConnection((c) => { setConnected(c); if (!c) setPressed(new Set()); });
     const offExt = api.onConfigExternal((r) => { setConfig(r.config); configRef.current = r.config; setConfigError(r.error); });
     const offEv = api.onHelperEvent((e: HelperEvent) => {
@@ -154,6 +157,22 @@ export default function App() {
 
   const setSettings = (s: Settings) => update((c) => { c.settings = s; return c; });
 
+  const installHelper = async () => {
+    setInstallBusy(true);
+    try {
+      setInstall(await api.installHelper());
+      setToast({ id: Date.now(), text: "Helper instalado e iniciado" });
+    } catch (e) {
+      setToast({ id: Date.now(), text: `Falha ao instalar: ${(e as Error).message}` });
+    } finally {
+      setInstallBusy(false);
+    }
+  };
+
+  const uninstall = async () => {
+    try { await api.uninstall(); } catch (e) { setToast({ id: Date.now(), text: (e as Error).message }); }
+  };
+
   const helperCall = async (method: string, params?: Record<string, unknown>) => {
     try {
       const r = await api.helperCall(method, params);
@@ -194,6 +213,7 @@ export default function App() {
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="space-y-4 p-5">
             <Banners connected={connected} status={status} configError={configError}
+              install={install} busy={installBusy} onInstall={installHelper}
               onLaunch={() => api.launchHelper()}
               onPermission={(kind) => helperCall("requestPermission", { kind })} />
 
@@ -245,6 +265,10 @@ export default function App() {
           onLaunchAtLogin={(v) => helperCall("setLaunchAtLogin", { enabled: v })}
           onOpenLog={() => api.openLog()}
           onOpenFolder={() => api.openConfigFolder()}
+          install={install}
+          busy={installBusy}
+          onInstall={installHelper}
+          onUninstall={uninstall}
         />
       )}
     </div>
